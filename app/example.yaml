@@ -1,0 +1,42 @@
+# Database configuration
+database:
+    driver: postgres
+    username: postgres
+    password: postgres
+    host: localhost
+    port: 5432
+    database: db_name
+    data_source_name: ""
+    database_schema_name: public
+    table_prefix: pre_
+
+# Table filter regular expression or actual table name
+disable_table:
+    - ^disable_.*$
+    - ^example_.*$
+    - system_table_name
+
+# Custom override comment
+comments:
+    example_test:
+        comment: example test table comment
+        columns:
+            id: ID primary key
+    example_user:
+        comment: example user
+        columns:
+            age: Age
+            created_at: created timestamp
+            deleted_at: deleted timestamp
+            email: Email
+            id: ID primary key
+            name: Name
+            updated_at: updated timestamp
+
+# Custom template file path.
+# Make sure the route is real and valid.
+# You can leave it empty if not needed.
+template_file_custom: replace this with a custom template path
+template_file_replace: replace this with a custom-replace template path
+template_file_schema: replace this with a custom-schema template path
+template_file_table: replace this with a custom-table template path

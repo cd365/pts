@@ -1,0 +1,21 @@
+{{range $i, $t := .Tables}}
+// {{$t.TableGoTypeNameTimestamp}} {{$t.Comment}}
+type {{$t.TableGoTypeNameTimestamp}} struct {
+{{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}} string{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+}
+
+// Table Get table name.
+func (s {{$t.TableGoTypeNameTimestamp}}) Table() string {
+	return "{{$t.Table}}" // {{$t.Comment}}
+}
+
+// Select Get table all columns.
+func (s {{$t.TableGoTypeNameTimestamp}}) Select() []string {
+    return []string{ {{range $j, $c := $t.Columns}}"{{$c.Column}}"{{if lt (add $j 1) (len $t.Columns)}}, {{end}}{{end}} }
+}
+
+// {{$t.TableGoTypeName}} {{$t.Comment}}
+var {{$t.TableGoTypeName}} = {{$t.TableGoTypeNameTimestamp}}{
+{{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+}
+{{end}}

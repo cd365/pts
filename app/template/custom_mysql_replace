@@ -1,0 +1,5 @@
+// MapTable All table name mappings.
+var MapTable = map[string]string{ {{print "\n"}}{{range $i, $t := .Tables}}{{print "\t"}}"{{$t.Table}}": "{{(mark "`" $t.Table)}}",{{if isNotEmpty $t.Comment}} // {{$t.Comment}}{{end}}{{print "\n"}}{{end}} }
+
+// MapColumn All column name mappings.
+var MapColumn = map[string]string{ {{print "\n"}}{{range $i, $v := .AllTableColumns}}{{print "\t"}}"{{$v}}": "{{(mark "`" $v)}}",{{print "\n"}}{{end}} }

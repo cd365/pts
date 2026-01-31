@@ -1,0 +1,40 @@
+Template Rendering:
+
+.Tables => All table structures
+.AllTableColumns => All columns of all tables have unique column names
+
+
+
+.Tables[0].Database => The database to which the current table belongs; the value is null for SQLite
+.Tables[0].Table => Current table name (Original table name)
+.Tables[0].Comment => Current table comment
+.Tables[0].Columns => All columns of the current table
+.Tables[0].Defined => Create table statement of the current table
+.Tables[0].AutoIncrementColumn => Primary key | Auto-increment column of the current table
+.Tables[0].TableGoTypeName => The current table's name in the golang struct (may remove a specific table name prefix)
+.Tables[0].TableGoTypeNameTimestamp => The name of the current table in the golang struct and the timestamp when it was generated
+
+
+
+.Tables[0].Columns[0].Database => Database name
+.Tables[0].Columns[0].Table => Current table name (Original table name)
+.Tables[0].Columns[0].Column => Current column name
+.Tables[0].Columns[0].Comment => Current column comment
+.Tables[0].Columns[0].Type => Current column type
+.Tables[0].Columns[0].DataType => Current column data type
+.Tables[0].Columns[0].ColumnDefault => Current column default value
+.Tables[0].Columns[0].IsNullable => Whether to allow the column value to be null
+.Tables[0].Columns[0].OrdinalPosition => Current column serial number
+.Tables[0].Columns[0].CharacterMaximumLength => Current column maximum string length
+.Tables[0].Columns[0].CharacterOctetLength => Current column maximum byte length of text string
+.Tables[0].Columns[0].NumericPrecision => Current column maximum length of integer | total length of decimal (integer + decimal)
+.Tables[0].Columns[0].NumericScale => Current column decimal precision length
+.Tables[0].Columns[0].CharacterSetName => Current column character set name
+.Tables[0].Columns[0].CollationName => Current column collation name
+.Tables[0].Columns[0].ColumnKey => Current column index; '', 'PRI', 'UNI', 'MUL'
+.Tables[0].Columns[0].Extra => Current column extra; auto_increment
+
+.Tables[0].Columns[0].ColumnCamel => column name camel case
+.Tables[0].Columns[0].ColumnPascal => column name pascal case
+.Tables[0].Columns[0].ColumnUnderline => column name underline case
+.Tables[0].Columns[0].GoType => column-go-type example: string, int64, int, *string ...

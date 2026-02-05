@@ -943,6 +943,7 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 	case cst.Sqlite:
 		databaseName = ""
 	}
+
 	lists, err := schema.QueryTables(ctx, config, databaseName)
 	if err != nil {
 		return nil, err
@@ -950,12 +951,10 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 
 	onlyTableMap := make(map[string]*struct{})
 	for _, t := range config.OnlyTable {
-		t = strings.TrimSpace(t)
-		if t != "" {
-			onlyTableMap[t] = nil
-		}
+		onlyTableMap[t] = nil
 	}
 	onlyTable := len(onlyTableMap) > 0
+
 	tables := make([]*Table, 0, len(lists))
 	for _, t := range lists {
 		if onlyTable {

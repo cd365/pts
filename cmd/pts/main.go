@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cd365/hey/v7"
 	"github.com/cd365/pts/app"
 	"github.com/spf13/cobra"
 )
@@ -116,14 +117,22 @@ func start(cmd *cobra.Command, args []string, command string) error {
 		return err
 	}
 
-	onlyTable, err := cmd.Flags().GetString(flagTable)
-	if err != nil {
-		return err
-	}
-	onlyTable = strings.TrimSpace(onlyTable)
-	tables := strings.Split(onlyTable, ",")
-	if len(tables) > 0 {
-		cli.Cfg().OnlyTable = tables
+	{
+		values := ""
+		values, err = cmd.Flags().GetString(flagTable)
+		if err != nil {
+			return err
+		}
+		tables := strings.Split(strings.TrimSpace(values), ",")
+		tables = hey.DiscardDuplicate(func(tmp string) bool {
+			if strings.TrimSpace(tmp) == "" {
+				return true
+			}
+			return false
+		}, tables...)
+		if len(tables) > 0 {
+			cli.Cfg().OnlyTable = tables
+		}
 	}
 
 	output, err := cli.Run(context.Background(), cli.NewOutput(command))

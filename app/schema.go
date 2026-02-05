@@ -525,13 +525,16 @@ func (s *Column) init(way *hey.Way) {
 // Schema Parse the structure of tables and columns in the database
 type Schema interface {
 	// QueryTableDefineSql Get the DDL of a specific table in a database
-	QueryTableDefineSql(ctx context.Context, table *Table) (string, error)
+	QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error)
 
 	// QueryTables Get all tables in a database
-	QueryTables(ctx context.Context, schema string) ([]*Table, error)
+	QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error)
 
 	// QueryColumns Get all columns of a specific table in a database
-	QueryColumns(ctx context.Context, schema string, table string) ([]*Column, error)
+	QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error)
+
+	// QuerySchemas Call QueryColumns and QueryTableDefineSql.
+	QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error
 }
 
 // autoIncrementRegexpReplace Auto-increment column.
@@ -543,7 +546,7 @@ type SchemaMysql struct {
 	way *hey.Way
 }
 
-func (s *SchemaMysql) QueryTableDefineSql(ctx context.Context, table *Table) (string, error) {
+func (s *SchemaMysql) QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error) {
 	for _, c := range table.Columns {
 		if c.Extra != nil && strings.ToLower(*c.Extra) == "auto_increment" {
 			table.AutoIncrementColumn = c.Column
@@ -568,41 +571,26 @@ func (s *SchemaMysql) QueryTableDefineSql(ctx context.Context, table *Table) (st
 	return defined, nil
 }
 
-func (s *SchemaMysql) QueryTables(ctx context.Context, schema string) ([]*Table, error) {
+func (s *SchemaMysql) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
 	tables := make([]*Table, 0)
-	prepare := "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = ? ORDER BY TABLE_NAME ASC;"
-	if err := s.way.Scan(ctx, hey.NewSQL(prepare, schema), &tables); err != nil {
+	// "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = ? ORDER BY TABLE_NAME ASC;"
+	query := s.way.Table("information_schema.TABLES")
+	query.Select("TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment")
+	query.WhereFunc(func(where hey.Filter) {
+		where.Equal("TABLE_SCHEMA", schema)
+		where.Equal("TABLE_TYPE", "BASE TABLE")
+		if len(cfg.OnlyTable) > 0 {
+			where.In("TABLE_NAME", cfg.OnlyTable)
+		}
+	})
+	query.Asc("TABLE_NAME")
+	if err := query.Scan(ctx, &tables); err != nil {
 		return nil, err
-	}
-	var errorQuery error
-	once := &sync.Once{}
-	waitGroup := &sync.WaitGroup{}
-	for _, table := range tables {
-		waitGroup.Add(1)
-		go func(table *Table) {
-			defer waitGroup.Done()
-			columns, err := s.QueryColumns(ctx, schema, table.Table)
-			if err != nil {
-				once.Do(func() { errorQuery = err })
-				return
-			}
-			table.Columns = columns
-			defined, err := s.QueryTableDefineSql(ctx, table)
-			if err != nil {
-				once.Do(func() { errorQuery = err })
-				return
-			}
-			table.Defined = defined
-		}(table)
-	}
-	waitGroup.Wait()
-	if errorQuery != nil {
-		return nil, errorQuery
 	}
 	return tables, nil
 }
 
-func (s *SchemaMysql) QueryColumns(ctx context.Context, schema string, table string) ([]*Column, error) {
+func (s *SchemaMysql) QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error) {
 	columns := make([]*Column, 0)
 	if schema == "" || table == "" {
 		return columns, nil
@@ -613,6 +601,35 @@ func (s *SchemaMysql) QueryColumns(ctx context.Context, schema string, table str
 		return nil, err
 	}
 	return columns, nil
+}
+
+func (s *SchemaMysql) QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error {
+	var errorQuery error
+	once := &sync.Once{}
+	waitGroup := &sync.WaitGroup{}
+	for _, table := range tables {
+		waitGroup.Add(1)
+		go func(table *Table) {
+			defer waitGroup.Done()
+			columns, err := s.QueryColumns(ctx, cfg, table.Database, table.Table)
+			if err != nil {
+				once.Do(func() { errorQuery = err })
+				return
+			}
+			table.Columns = columns
+			defined, err := s.QueryTableDefineSql(ctx, cfg, table)
+			if err != nil {
+				once.Do(func() { errorQuery = err })
+				return
+			}
+			table.Defined = defined
+		}(table)
+	}
+	waitGroup.Wait()
+	if errorQuery != nil {
+		return errorQuery
+	}
+	return nil
 }
 
 func NewSchemaMysql(way *hey.Way) *SchemaMysql {
@@ -630,7 +647,7 @@ type SchemaPostgresql struct {
 	way *hey.Way
 }
 
-func (s *SchemaPostgresql) QueryTableDefineSql(ctx context.Context, table *Table) (string, error) {
+func (s *SchemaPostgresql) QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error) {
 	var createSequence string
 	for _, c := range table.Columns {
 		if c.ColumnDefault == nil {
@@ -668,7 +685,7 @@ func (s *SchemaPostgresql) QueryTableDefineSql(ctx context.Context, table *Table
 	return result, nil
 }
 
-func (s *SchemaPostgresql) queryTableComment(ctx context.Context, table *Table) (string, error) {
+func (s *SchemaPostgresql) queryTableComment(ctx context.Context, cfg *Config, table *Table) (string, error) {
 	prepare := "SELECT cast(obj_description(relfilenode, 'pg_class') AS VARCHAR) AS table_comment FROM pg_tables LEFT OUTER JOIN pg_class ON pg_tables.tablename = pg_class.relname WHERE ( pg_tables.schemaname = ? AND pg_tables.tablename = ? ) ORDER BY pg_tables.schemaname ASC LIMIT 1;"
 	if err := s.way.Query(ctx, hey.NewSQL(prepare, table.Database, table.Table), func(rows *sql.Rows) error {
 		if !rows.Next() {
@@ -688,42 +705,26 @@ func (s *SchemaPostgresql) queryTableComment(ctx context.Context, table *Table) 
 	return table.Comment, nil
 }
 
-func (s *SchemaPostgresql) QueryTables(ctx context.Context, schema string) ([]*Table, error) {
+func (s *SchemaPostgresql) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
 	tables := make([]*Table, 0)
-	prepare := "SELECT table_schema, table_name FROM information_schema.tables WHERE ( table_schema = ? AND table_type = 'BASE TABLE' ) ORDER BY table_name ASC"
-	if err := s.way.Scan(ctx, hey.NewSQL(prepare, schema), &tables); err != nil {
+	// SELECT table_schema, table_name FROM information_schema.tables WHERE ( table_schema = ? AND table_type = 'BASE TABLE' ) ORDER BY table_name ASC
+	query := s.way.Table("information_schema.tables")
+	query.Select("table_schema, table_name")
+	query.WhereFunc(func(where hey.Filter) {
+		where.Equal("table_schema", schema)
+		where.Equal("table_type", "BASE TABLE")
+		if len(cfg.OnlyTable) > 0 {
+			where.In("table_name", cfg.OnlyTable)
+		}
+	})
+	query.Asc("table_name")
+	if err := query.Scan(ctx, &tables); err != nil {
 		return nil, err
-	}
-	var errorQuery error
-	once := &sync.Once{}
-	wg := &sync.WaitGroup{}
-	for _, table := range tables {
-		wg.Add(1)
-		go func(table *Table) {
-			defer wg.Done()
-			columns, err := s.QueryColumns(ctx, schema, table.Table)
-			if err != nil {
-				once.Do(func() { errorQuery = err })
-				return
-			}
-			table.Columns = columns
-			if table.Comment, err = s.queryTableComment(ctx, table); err != nil {
-				once.Do(func() { errorQuery = err })
-			}
-			_, err = s.QueryTableDefineSql(ctx, table)
-			if err != nil {
-				once.Do(func() { errorQuery = err })
-			}
-		}(table)
-	}
-	wg.Wait()
-	if errorQuery != nil {
-		return nil, errorQuery
 	}
 	return tables, nil
 }
 
-func (s *SchemaPostgresql) QueryColumns(ctx context.Context, schema string, table string) ([]*Column, error) {
+func (s *SchemaPostgresql) QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error) {
 	columns := make([]*Column, 0)
 	if schema == "" || table == "" {
 		return columns, nil
@@ -780,6 +781,36 @@ func (s *SchemaPostgresql) QueryColumns(ctx context.Context, schema string, tabl
 	return columns, nil
 }
 
+func (s *SchemaPostgresql) QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error {
+	var errorQuery error
+	once := &sync.Once{}
+	wg := &sync.WaitGroup{}
+	for _, table := range tables {
+		wg.Add(1)
+		go func(table *Table) {
+			defer wg.Done()
+			columns, err := s.QueryColumns(ctx, cfg, table.Database, table.Table)
+			if err != nil {
+				once.Do(func() { errorQuery = err })
+				return
+			}
+			table.Columns = columns
+			if table.Comment, err = s.queryTableComment(ctx, cfg, table); err != nil {
+				once.Do(func() { errorQuery = err })
+			}
+			_, err = s.QueryTableDefineSql(ctx, cfg, table)
+			if err != nil {
+				once.Do(func() { errorQuery = err })
+			}
+		}(table)
+	}
+	wg.Wait()
+	if errorQuery != nil {
+		return errorQuery
+	}
+	return nil
+}
+
 func NewSchemaPostgresql(way *hey.Way) *SchemaPostgresql {
 	schema := &SchemaPostgresql{}
 	schema.way = way
@@ -790,14 +821,24 @@ type SchemaSqlite struct {
 	way *hey.Way
 }
 
-func (s *SchemaSqlite) QueryTableDefineSql(ctx context.Context, table *Table) (string, error) {
+func (s *SchemaSqlite) QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error) {
 	return table.Defined, nil
 }
 
-func (s *SchemaSqlite) QueryTables(ctx context.Context, schema string) ([]*Table, error) {
+func (s *SchemaSqlite) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
 	tables := make([]*Table, 0)
-	prepare := "SELECT name AS table_name, sql AS table_defined FROM sqlite_master WHERE ( type = 'table' AND name <> 'sqlite_sequence' );"
-	if err := s.way.Query(ctx, hey.NewSQL(prepare), func(rows *sql.Rows) error {
+	// SELECT name AS table_name, sql AS table_defined FROM sqlite_master WHERE ( type = 'table' AND name <> 'sqlite_sequence' );
+	query := s.way.Table("sqlite_master")
+	query.Select("name AS table_name, sql AS table_defined")
+	query.WhereFunc(func(where hey.Filter) {
+		where.Equal("type", "table")
+		where.NotEqual("name", "sqlite_sequence")
+		if len(cfg.OnlyTable) > 0 {
+			where.In("name", cfg.OnlyTable)
+		}
+	})
+	query.Asc("table_name")
+	if err := s.way.Query(ctx, query.ToSelect(), func(rows *sql.Rows) error {
 		for rows.Next() {
 			table := ""
 			defined := ""
@@ -813,22 +854,10 @@ func (s *SchemaSqlite) QueryTables(ctx context.Context, schema string) ([]*Table
 	}); err != nil {
 		return nil, err
 	}
-	for _, table := range tables {
-		columns, err := s.QueryColumns(ctx, schema, table.Table)
-		if err != nil {
-			return nil, err
-		}
-		for _, column := range columns {
-			if table.AutoIncrementColumn == "" && column.Extra != nil && *column.Extra == "auto_increment" {
-				table.AutoIncrementColumn = column.Column
-			}
-		}
-		table.Columns = columns
-	}
 	return tables, nil
 }
 
-func (s *SchemaSqlite) QueryColumns(ctx context.Context, schema string, table string) ([]*Column, error) {
+func (s *SchemaSqlite) QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error) {
 	columns := make([]*Column, 0)
 	if table == "" {
 		return columns, nil
@@ -883,6 +912,22 @@ func (s *SchemaSqlite) QueryColumns(ctx context.Context, schema string, table st
 	return columns, nil
 }
 
+func (s *SchemaSqlite) QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error {
+	for _, table := range tables {
+		columns, err := s.QueryColumns(ctx, cfg, table.Database, table.Table)
+		if err != nil {
+			return err
+		}
+		for _, column := range columns {
+			if table.AutoIncrementColumn == "" && column.Extra != nil && *column.Extra == "auto_increment" {
+				table.AutoIncrementColumn = column.Column
+			}
+		}
+		table.Columns = columns
+	}
+	return nil
+}
+
 func NewSchemaSqlite(way *hey.Way) *SchemaSqlite {
 	schema := &SchemaSqlite{}
 	schema.way = way
@@ -898,10 +943,37 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 	case cst.Sqlite:
 		databaseName = ""
 	}
-	tables, err := schema.QueryTables(ctx, databaseName)
+	lists, err := schema.QueryTables(ctx, config, databaseName)
 	if err != nil {
 		return nil, err
 	}
+
+	onlyTableMap := make(map[string]*struct{})
+	for _, t := range config.OnlyTable {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			onlyTableMap[t] = nil
+		}
+	}
+	onlyTable := len(onlyTableMap) > 0
+	tables := make([]*Table, 0, len(lists))
+	for _, t := range lists {
+		if onlyTable {
+			if _, ok := onlyTableMap[t.Table]; ok {
+				tables = append(tables, t)
+			}
+			continue
+		}
+		if isTableDisabled(config, t.Table) {
+			continue
+		}
+		tables = append(tables, t)
+	}
+	err = schema.QuerySchemas(ctx, config, tables)
+	if err != nil {
+		return nil, err
+	}
+
 	timestamp := time.Now().Unix()
 	for _, t := range tables {
 		if t.Comment == "" {
@@ -923,27 +995,5 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 		}
 	}
 
-	onlyTableMap := make(map[string]*struct{})
-	for _, t := range config.OnlyTable {
-		t = strings.TrimSpace(t)
-		if t != "" {
-			onlyTableMap[t] = nil
-		}
-	}
-	onlyTable := len(onlyTableMap) > 0
-
-	result := make([]*Table, 0, len(tables))
-	for _, t := range tables {
-		if onlyTable {
-			if _, ok := onlyTableMap[t.Table]; ok {
-				result = append(result, t)
-			}
-			continue
-		}
-		if isTableDisabled(config, t.Table) {
-			continue
-		}
-		result = append(result, t)
-	}
-	return result, nil
+	return tables, nil
 }

@@ -934,6 +934,13 @@ func NewSchemaSqlite(way *hey.Way) *SchemaSqlite {
 	return schema
 }
 
+func removeNewlineCharacter(s string) string {
+	if strings.Contains(s, "\n") {
+		return strings.ReplaceAll(s, "\n", "")
+	}
+	return s
+}
+
 // GetAllTables Get all tables and their columns that meet the criteria
 func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.Way) ([]*Table, error) {
 	databaseName := config.Database.Database
@@ -977,6 +984,8 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 	for _, t := range tables {
 		if t.Comment == "" {
 			t.Comment = t.Table
+		} else {
+			t.Comment = removeNewlineCharacter(t.Comment)
 		}
 		// Handle naming
 		{
@@ -990,6 +999,7 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 			}
 			for _, c := range t.Columns {
 				c.init(way)
+				c.Comment = removeNewlineCharacter(c.Comment)
 			}
 		}
 	}

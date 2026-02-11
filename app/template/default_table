@@ -1,5 +1,5 @@
 {{range $i, $t := .Tables}}
-// {{$t.TableGoTypeName}} {{$t.Comment}}
+// {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
 type {{$t.TableGoTypeName}} struct {
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}} {{$c.GoType}} `db:"{{$c.Column}}" yaml:"{{$c.ColumnUnderline}}" json:"{{$c.ColumnCamel}}" camel:"{{$c.ColumnCamel}}" pascal:"{{$c.ColumnPascal}}" underline:"{{$c.ColumnUnderline}}"`{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 }

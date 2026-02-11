@@ -935,8 +935,18 @@ func NewSchemaSqlite(way *hey.Way) *SchemaSqlite {
 }
 
 func removeNewlineCharacter(s string) string {
-	if strings.Contains(s, "\n") {
-		return strings.ReplaceAll(s, "\n", "")
+	substr := "\r\n"
+	replace := ""
+	if strings.Contains(s, substr) {
+		s = strings.ReplaceAll(s, substr, replace)
+	}
+	substr = "\r"
+	if strings.Contains(s, substr) {
+		s = strings.ReplaceAll(s, substr, replace)
+	}
+	substr = "\n"
+	if strings.Contains(s, substr) {
+		s = strings.ReplaceAll(s, substr, replace)
 	}
 	return s
 }

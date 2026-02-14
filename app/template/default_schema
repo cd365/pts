@@ -2,6 +2,7 @@
 // {{$t.TableGoTypeNameTimestamp}} {{$t.Table}} | {{$t.Comment}}
 type {{$t.TableGoTypeNameTimestamp}} struct {
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}} string{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	columnType map[string]string
 }
 
 // Table Get table name.
@@ -14,8 +15,16 @@ func (s {{$t.TableGoTypeNameTimestamp}}) Select() []string {
     return []string{ {{range $j, $c := $t.Columns}}"{{$c.Column}}"{{if lt (add $j 1) (len $t.Columns)}}, {{end}}{{end}} }
 }
 
+// ColumnType Get the mapping of column names to their corresponding types without modifying the returned map.
+func (s {{$t.TableGoTypeNameTimestamp}}) ColumnType() map[string]string {
+	return s.columnType
+}
+
 // {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
 var {{$t.TableGoTypeName}} = {{$t.TableGoTypeNameTimestamp}}{
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	columnType: map[string]string{
+{{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": "{{$c.GoType}}",{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	},
 }
 {{end}}

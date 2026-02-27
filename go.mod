@@ -3,7 +3,7 @@ module github.com/cd365/pts
 go 1.25.6
 
 require (
-	github.com/cd365/hey/v7 v7.0.0-20260203131028-85a83f632ce0
+	github.com/cd365/hey/v7 v7.0.0-20260213141257-3c280b738993
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/lib/pq v1.11.1
 	github.com/mattn/go-sqlite3 v1.14.33

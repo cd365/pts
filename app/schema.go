@@ -1005,7 +1005,7 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 					name = strings.TrimPrefix(name, config.Database.TablePrefix)
 				}
 				t.TableGoTypeName = Pascal(name)
-				t.TableGoTypeNameTimestamp = fmt.Sprintf("%s%d", t.TableGoTypeName, timestamp)
+				t.TableGoTypeNameTimestamp = fmt.Sprintf("T%d%s", timestamp, t.TableGoTypeName)
 			}
 			for _, c := range t.Columns {
 				c.init(way)

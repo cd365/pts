@@ -40,3 +40,5 @@ template_file_custom: replace this with a custom template path
 template_file_replace: replace this with a custom-replace template path
 template_file_schema: replace this with a custom-schema template path
 template_file_table: replace this with a custom-table template path
+
+filter_id: true

@@ -64,8 +64,11 @@ type Config struct {
 	TemplateFileSchema  string `yaml:"template_file_schema"`
 	TemplateFileTable   string `yaml:"template_file_table"`
 
-	// Only export the following tables.
+	// Only export the following tables
 	OnlyTable []string `yaml:"only_table"`
+
+	// FilterId Custom filter-id method
+	FilterId bool `yaml:"filter_id"`
 }
 
 // exampleConfig Config example
@@ -298,6 +301,7 @@ func (s *App) Run(ctx context.Context, output func(ctx context.Context, tmp *Tem
 	}
 
 	tmp := &Template{
+		Config: s.cfg,
 		Tables: tables,
 	}
 
@@ -418,6 +422,7 @@ func (s *App) NewOutput(cmd string) func(ctx context.Context, tmp *Template) (co
 }
 
 type Template struct {
+	Config          *Config
 	Tables          []*Table // All exported tables
 	AllTableColumns []string // A list of all columns from all tables, with duplicates removed based on column names
 }

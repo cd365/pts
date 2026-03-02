@@ -10,6 +10,11 @@ func (s {{$t.TableGoTypeNameTimestamp}}) Table() string {
 	return "{{$t.Table}}" // {{$t.Comment}}
 }
 
+// Comment Get table comment.
+func (s {{$t.TableGoTypeNameTimestamp}}) Comment() string {
+	return "{{$t.Comment}}"
+}
+
 // Select Get table all columns.
 func (s {{$t.TableGoTypeNameTimestamp}}) Select() []string {
     return []string{ {{range $j, $c := $t.Columns}}"{{$c.Column}}"{{if lt (add $j 1) (len $t.Columns)}}, {{end}}{{end}} }
@@ -19,6 +24,26 @@ func (s {{$t.TableGoTypeNameTimestamp}}) Select() []string {
 func (s {{$t.TableGoTypeNameTimestamp}}) ColumnType() map[string]string {
 	return s.columnType
 }
+
+{{if $.Config.FilterId}}/* Filter id */
+{{range $j, $c := $t.Columns}}{{if and (eq $c.Column "id") ( or (eq $c.GoType "int") (eq $c.GoType "int64") (eq $c.GoType "uint") (eq $c.GoType "uint64") )}}
+func (s {{$t.TableGoTypeNameTimestamp}}) FilterIdEqual(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
+	return func(f hey.Filter) {
+		f.Equal(s.{{$c.ColumnPascal}}, value)
+		for _, filter := range filters {
+			if filter != nil {
+				filter(f)
+			}
+		}
+	}
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) FilterIdIn(values ...any) func(f hey.Filter) {
+	return func(f hey.Filter) {
+		f.In(s.{{$c.ColumnPascal}}, values...)
+	}
+}
+{{break}}{{end}}{{end}}{{end}}
 
 // {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
 var {{$t.TableGoTypeName}} = {{$t.TableGoTypeNameTimestamp}}{

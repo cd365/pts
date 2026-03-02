@@ -75,8 +75,7 @@ func (s {{$t.TableGoTypeNameTimestamp}}) SelectAll(ctx context.Context, way *hey
 	err := way.Query(ctx, table.ToSelect(), func(rows *sql.Rows) error {
 		for rows.Next() {
 			tmp := &{{$packageTable}}.{{$t.TableGoTypeName}}{}{{range $j, $c := $t.Columns}}{{if ne $c.GoTypeInitValue ""}}{{print "\n\t\t\t"}}tmp.{{$c.ColumnPascal}} = {{$c.GoTypeInitValue}}{{if lt (add $j 1) (len $t.Columns)}}{{end}}{{end}}{{end}}
-			err := rows.Scan(
-				{{range $j, $c := $t.Columns}}&tmp.{{$c.ColumnPascal}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n\t\t\t\t"}}{{end}}{{end}}
+			err := rows.Scan({{range $j, $c := $t.Columns}}{{print "\n\t\t\t\t"}}&tmp.{{$c.ColumnPascal}},{{if lt (add $j 1) (len $t.Columns)}}{{end}}{{end}}
 			)
 			if err != nil {
 				return err

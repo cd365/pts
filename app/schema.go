@@ -69,6 +69,11 @@ type Config struct {
 
 	// FilterId Custom filter-id method
 	FilterId bool `yaml:"filter_id"`
+
+	// PackageTable Package name of the generated table struct
+	PackageTable string `yaml:"package_table"`
+	// SingleTableDefault Single table default actions
+	SingleTableDefault bool `yaml:"single_table_default"`
 }
 
 // exampleConfig Config example
@@ -464,6 +469,7 @@ type Column struct {
 	ColumnPascal    string `db:"-"` // column name pascal case
 	ColumnUnderline string `db:"-"` // column name underline case
 	GoType          string `db:"-"` // string, int64, int, *string ...
+	GoTypeInitValue string `db:"-"` // new(string), new(int64), new(int), new(float64) ...
 }
 
 func (s *Column) goType() (result string) {
@@ -525,6 +531,9 @@ func (s *Column) init(way *hey.Way) {
 		s.ColumnUnderline = Underline(s.Column)
 	}
 	s.GoType = s.goType()
+	if strings.HasPrefix(s.GoType, "*") {
+		s.GoTypeInitValue = fmt.Sprintf("new(%s)", strings.ReplaceAll(s.GoType, "*", ""))
+	}
 }
 
 // Schema Parse the structure of tables and columns in the database

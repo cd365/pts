@@ -45,6 +45,88 @@ func (s {{$t.TableGoTypeNameTimestamp}}) FilterIdIn(values ...any) func(f hey.Fi
 }
 {{break}}{{end}}{{end}}{{end}}
 
+{{$packageTable := $.Config.PackageTable}}
+{{if and $.Config.SingleTableDefault (ne $packageTable "")}}/* Single table default actions */
+
+func (s {{$t.TableGoTypeNameTimestamp}}) Insert(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) (int64, error) {
+	return way.Table(s.Table()).InsertFunc(insert).Insert(ctx)
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) Delete(ctx context.Context, way *hey.Way, where func(f hey.Filter)) (int64, error) {
+	return way.Table(s.Table()).WhereFunc(where).Delete(ctx)
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) Update(ctx context.Context, way *hey.Way, update func(f hey.Filter, u hey.SQLUpdateSet)) (int64, error) {
+	return way.Table(s.Table()).UpdateFunc(update).Update(ctx)
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) SelectAll(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+	table := way.Table(s.Table())
+	for _, option := range options {
+		if option != nil {
+			option(table)
+		}
+	}
+	table.SelectFunc(func(q hey.SQLSelect) {
+		q.ToEmpty()
+		q.Select(s.Select())
+	})
+	lists := make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
+	err := way.Query(ctx, table.ToSelect(), func(rows *sql.Rows) error {
+		for rows.Next() {
+			tmp := &{{$packageTable}}.{{$t.TableGoTypeName}}{}{{range $j, $c := $t.Columns}}{{if ne $c.GoTypeInitValue ""}}{{print "\n\t\t\t"}}tmp.{{$c.ColumnPascal}} = {{$c.GoTypeInitValue}}{{if lt (add $j 1) (len $t.Columns)}}{{end}}{{end}}{{end}}
+			err := rows.Scan(
+				{{range $j, $c := $t.Columns}}&tmp.{{$c.ColumnPascal}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n\t\t\t\t"}}{{end}}{{end}}
+			)
+			if err != nil {
+				return err
+			}
+			lists = append(lists, tmp)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lists, nil
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) SelectOne(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+	options = append(options, func(table *hey.Table) {
+		table.Limit(1)
+	})
+	lists,err := s.SelectAll(ctx, way, options...)
+	if err != nil {
+		return nil, err
+	}
+	if len(lists) == 0 {
+		return nil, nil
+	}
+	return lists[0], nil
+}
+
+{{range $j, $c := $t.Columns}}{{if and (eq $c.Column "id") ( or (eq $c.GoType "int") (eq $c.GoType "int64") (eq $c.GoType "uint") (eq $c.GoType "uint64") )}}
+func (s {{$t.TableGoTypeNameTimestamp}}) SelectAllById(ctx context.Context, way *hey.Way, idValues []{{$c.GoType}}, options ...func(table *hey.Table)) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+	options = append(options, func(table *hey.Table) {
+		table.WhereFunc(func(f hey.Filter) {
+			f.In(s.{{$c.ColumnPascal}}, idValues)
+		})
+	})
+	return s.SelectAll(ctx, way, options...)
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) SelectOneById(ctx context.Context, way *hey.Way, idValue {{$c.GoType}}, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+	options = append(options, func(table *hey.Table) {
+		table.WhereFunc(func(f hey.Filter) {
+			f.Equal(s.{{$c.ColumnPascal}}, idValue)
+		})
+	})
+	return s.SelectOne(ctx, way, options...)
+}
+{{end}}{{end}}
+
+{{end}}
+
 // {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
 var {{$t.TableGoTypeName}} = {{$t.TableGoTypeNameTimestamp}}{
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}

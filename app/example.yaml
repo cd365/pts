@@ -42,3 +42,6 @@ template_file_schema: replace this with a custom-schema template path
 template_file_table: replace this with a custom-table template path
 
 filter_id: true
+
+package_table: model
+single_table_default: true

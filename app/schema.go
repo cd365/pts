@@ -33,6 +33,10 @@ const (
 	CmdTable   = "table"
 )
 
+type MethodTableColumn struct {
+	Select []string `yaml:"select"`
+}
+
 type Config struct {
 	// Database driver name, database connection, database schema name, database table prefix
 	Database struct {
@@ -67,13 +71,15 @@ type Config struct {
 	// Only export the following tables
 	OnlyTable []string `yaml:"only_table"`
 
-	// FilterId Custom filter-id method
-	FilterId bool `yaml:"filter_id"`
+	// AutoIncrementFilter When true, generate filter functions for auto-increment column
+	AutoIncrementFilter bool `yaml:"auto_increment_filter"`
 
 	// PackageTable Package name of the generated table struct
 	PackageTable string `yaml:"package_table"`
 	// SingleTableDefault Single table default actions
 	SingleTableDefault bool `yaml:"single_table_default"`
+	// MethodTableColumn Method of table-column
+	MethodTableColumn map[string]*MethodTableColumn `yaml:"method_table_column"`
 }
 
 // exampleConfig Config example
@@ -469,7 +475,7 @@ type Column struct {
 	ColumnPascal    string `db:"-"` // column name pascal case
 	ColumnUnderline string `db:"-"` // column name underline case
 	GoType          string `db:"-"` // string, int64, int, *string ...
-	GoTypeInitValue string `db:"-"` // new(string), new(int64), new(int), new(float64) ...
+	GoTypeBase      string `db:"-"` // the base type pointed to by the pointer, such as string, int64, int ...
 }
 
 func (s *Column) goType() (result string) {
@@ -531,9 +537,7 @@ func (s *Column) init(way *hey.Way) {
 		s.ColumnUnderline = Underline(s.Column)
 	}
 	s.GoType = s.goType()
-	if strings.HasPrefix(s.GoType, "*") {
-		s.GoTypeInitValue = fmt.Sprintf("new(%s)", strings.ReplaceAll(s.GoType, "*", ""))
-	}
+	s.GoTypeBase = strings.ReplaceAll(s.GoType, "*", "")
 }
 
 // Schema Parse the structure of tables and columns in the database
@@ -1024,6 +1028,29 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 			for _, c := range t.Columns {
 				c.init(way)
 				c.Comment = removeNewlineCharacter(c.Comment)
+			}
+		}
+		// Method table column
+		{
+			if config.MethodTableColumn == nil {
+				config.MethodTableColumn = make(map[string]*MethodTableColumn)
+			}
+			value, ok := config.MethodTableColumn[t.Table]
+			if !ok {
+				value = &MethodTableColumn{}
+				config.MethodTableColumn[t.Table] = value
+			}
+			if t.AutoIncrementColumn != "" {
+				assoc := make(map[string]*struct{})
+				for _, column := range value.Select {
+					assoc[column] = nil
+				}
+				if _, ok = assoc[t.AutoIncrementColumn]; !ok {
+					columns := make([]string, 0, len(value.Select)+1)
+					columns = append(columns, t.AutoIncrementColumn)
+					columns = append(columns, value.Select...)
+					value.Select = columns
+				}
 			}
 		}
 	}

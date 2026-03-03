@@ -41,7 +41,12 @@ template_file_replace: replace this with a custom-replace template path
 template_file_schema: replace this with a custom-schema template path
 template_file_table: replace this with a custom-table template path
 
-filter_id: true
+auto_increment_filter: true
 
 package_table: model
 single_table_default: true
+method_table_column:
+    employee:
+        select:
+            - email
+            - username

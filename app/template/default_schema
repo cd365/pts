@@ -107,10 +107,6 @@ func (s {{$t.TableGoTypeNameTimestamp}}) SelectHas(ctx context.Context, way *hey
 			option(table)
 		}
 	}
-	table.SelectFunc(func(q hey.SQLSelect) {
-		q.ToEmpty()
-		q.Select("1")
-	})
 	return way.QueryExists(ctx, table.ToExists())
 }
 

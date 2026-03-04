@@ -3,7 +3,10 @@
 // {{$t.TableGoTypeNameTimestamp}} {{$t.Table}} | {{$t.Comment}}
 type {{$t.TableGoTypeNameTimestamp}} struct {
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}} string{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
-	columnType map[string]string
+
+	columnType map[string]string // column -> go type
+	columnIndex map[string]int // column -> index, the minimum value is 0
+	columnAllowNull map[string]int // column -> index, all columns that allow null value
 }
 
 // Table Get table name.
@@ -11,14 +14,14 @@ func (s {{$t.TableGoTypeNameTimestamp}}) Table() string {
 	return "{{$t.Table}}" // {{$t.Comment}}
 }
 
-// Comment Get table comment.
-func (s {{$t.TableGoTypeNameTimestamp}}) Comment() string {
-	return "{{$t.Comment}}"
-}
-
 // Column Get table all columns.
 func (s {{$t.TableGoTypeNameTimestamp}}) Column() []string {
     return []string{ {{range $j, $c := $t.Columns}}"{{$c.Column}}"{{if lt (add $j 1) (len $t.Columns)}}, {{end}}{{end}} }
+}
+
+// Comment Get table comment.
+func (s {{$t.TableGoTypeNameTimestamp}}) Comment() string {
+	return "{{$t.Comment}}"
 }
 
 // ColumnType Get the mapping of column names to their corresponding types without modifying the returned map.
@@ -28,7 +31,7 @@ func (s {{$t.TableGoTypeNameTimestamp}}) ColumnType() map[string]string {
 
 {{$autoIncrementColumn := $t.AutoIncrementColumn}}{{if $.Config.AutoIncrementFilter}}/* Filter auto-increment */
 {{range $j, $c := $t.Columns}}{{if and (eq $c.Column $autoIncrementColumn) ( or (eq $c.GoType "int") (eq $c.GoType "int64") (eq $c.GoType "uint") (eq $c.GoType "uint64") )}}
-func (s {{$t.TableGoTypeNameTimestamp}}) Filter{{$c.ColumnPascal}}Equal(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
+func (s {{$t.TableGoTypeNameTimestamp}}) Filter{{$c.ColumnPascal}}Eq(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
 	return func(f hey.Filter) {
 		f.Equal(s.{{$c.ColumnPascal}}, value)
 		for _, filter := range filters {
@@ -60,7 +63,7 @@ func (s {{$t.TableGoTypeNameTimestamp}}) Update(ctx context.Context, way *hey.Wa
 	return way.Table(s.Table()).UpdateFunc(update).Update(ctx)
 }
 
-func (s {{$t.TableGoTypeNameTimestamp}}) scanAll(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s {{$t.TableGoTypeNameTimestamp}}) allScan(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	lists := make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
 	for rows.Next() {
 		v := &{{$packageTable}}.{{$t.TableGoTypeName}}{}{{range $j, $c := $t.Columns}}{{if ne $c.GoType $c.GoTypeBase}}{{print "\n\t\t"}}v.{{$c.ColumnPascal}} = new({{$c.GoTypeBase}}){{if lt (add $j 1) (len $t.Columns)}}{{end}}{{end}}{{end}}
@@ -74,25 +77,88 @@ func (s {{$t.TableGoTypeNameTimestamp}}) scanAll(rows *sql.Rows) ([]*{{$packageT
 	return lists, nil
 }
 
-func (s {{$t.TableGoTypeNameTimestamp}}) SelectAll(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s {{$t.TableGoTypeNameTimestamp}}) matchScan(rows *sql.Rows, rowsColumns []string) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
+	columnIndex := s.columnIndex
+	if len(rowsColumns) == 0 {
+		rowsColumns, err = rows.Columns()
+		if err != nil {
+			return nil, err
+		}
+	}
+	length := len(rowsColumns)
+	rowsScan := make([]int, length)
+	rowsScanMap := make(map[string]int, length)
+	for i, column := range rowsColumns {
+		index, ok := columnIndex[column]
+		if !ok {
+			return nil, fmt.Errorf("mismatched column: %s", column)
+		}
+		rowsScan[i] = index
+		rowsScanMap[column] = index
+	}
+	lists = make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
+	for rows.Next() {
+		v := &{{$packageTable}}.{{$t.TableGoTypeName}}{}{{range $j, $c := $t.Columns}}{{if ne $c.GoType $c.GoTypeBase}}{{print "\n\t\t"}}v.{{$c.ColumnPascal}} = new({{$c.GoTypeBase}}){{if lt (add $j 1) (len $t.Columns)}}{{end}}{{end}}{{end}}
+		value := reflect.ValueOf(v).Elem()
+		scans := make([]any, length)
+		for i := 0; i < length; i++ {
+			scans[i] = value.Field(rowsScan[i]).Addr().Interface()
+		}
+		for column, index := range s.columnAllowNull {
+			if _, ok := rowsScanMap[column]; !ok {
+				field := value.Field(index)
+				field.Set(reflect.Zero(field.Type())) // reset to nil
+			}
+		}
+		if err = rows.Scan(scans...); err != nil {
+			return nil, err
+		}
+		lists = append(lists, v)
+	}
+	return lists, nil
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) autoScan(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+	rowsColumns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	length := len(rowsColumns)
+	columns := s.Column()
+	length1 := len(columns)
+	if length != length1 {
+		return s.matchScan(rows, rowsColumns)
+	}
+	for i := 0; i < length; i++ {
+		if rowsColumns[i] != columns[i] {
+			return s.matchScan(rows, rowsColumns)
+		}
+	}
+	return s.allScan(rows)
+}
+
+func (s {{$t.TableGoTypeNameTimestamp}}) SelectAll(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
 	table := way.Table(s.Table())
 	for _, option := range options {
 		if option != nil {
 			option(table)
 		}
 	}
+	selectAllColumn := false
 	table.SelectFunc(func(q hey.SQLSelect) {
-		q.ToEmpty()
-		q.Select(s.Column())
-	})
-	lists := make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
-	err := way.Query(ctx, table.ToSelect(), func(rows *sql.Rows) error {
-		if val, err := s.scanAll(rows);err != nil {
-			return err
-		} else {
-			lists = val
+		if q.IsEmpty() {
+			q.Select(s.Column())
+			selectAllColumn = true
 		}
-		return nil
+	})
+	lists = make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
+	err = way.Query(ctx, table.ToSelect(), func(rows *sql.Rows) error {
+		if selectAllColumn {
+			lists, err = s.allScan(rows)
+		}else{
+			lists, err = s.autoScan(rows)
+		}
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -173,6 +239,12 @@ var {{$t.TableGoTypeName}} = {{$t.TableGoTypeNameTimestamp}}{
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 	columnType: map[string]string{
 {{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": "{{$c.GoType}}",{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	},
+	columnIndex: map[string]int{
+{{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": {{$j}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	},
+	columnAllowNull: map[string]int{
+{{range $j, $c := $t.Columns}}{{if eq $c.GoType $c.GoTypeBase}}{{continue}}{{end}}{{print "\t\t"}}"{{$c.Column}}": {{$j}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 	},
 }
 {{end}}

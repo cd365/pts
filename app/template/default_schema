@@ -239,7 +239,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) SelectOneBy{{$c.ColumnPascal}}(ctx con
 {{end}}
 
 // {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
-var {{$t.TableGoTypeName}} = {{$t.TableGoTypeNameTimestamp}}{
+var {{$t.TableGoTypeName}} = &{{$t.TableGoTypeNameTimestamp}}{
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 	columnType: map[string]string{
 {{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": "{{$c.GoType}}",{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}

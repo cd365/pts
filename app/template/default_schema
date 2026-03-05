@@ -252,8 +252,8 @@ func (s *{{$t.TableGoTypeSignName}}) SelectOneBy{{$c.ColumnPascal}}(ctx context.
 {{break}}
 {{end}}
 {{end}}
-{{end}}
+{{end}}{{/* range Config.MethodTableColumn end */}}
 
-{{end}}
+{{end}}{{/* template method end */}}
 
-{{end}}
+{{end}}{{/* range tables end */}}

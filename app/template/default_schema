@@ -13,6 +13,20 @@ type {{$t.TableGoTypeSignName}} struct {
 	columnAllowNull map[string]int // column -> index, all columns that allow null value
 }
 
+// {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
+var {{$t.TableGoTypeName}} = &{{$t.TableGoTypeSignName}}{
+{{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	columnType: map[string]string{
+{{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": "{{$c.GoType}}",{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	},
+	columnIndex: map[string]int{
+{{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": {{$j}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	},
+	columnAllowNull: map[string]int{
+{{range $j, $c := $t.Columns}}{{if eq $c.GoType $c.GoTypeBase}}{{continue}}{{end}}{{print "\t\t"}}"{{$c.Column}}": {{$j}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	},
+}
+
 // Table Get table name.
 func (s *{{$t.TableGoTypeSignName}}) Table() string {
 	return "{{$t.Table}}" // {{$t.Comment}}
@@ -242,17 +256,4 @@ func (s *{{$t.TableGoTypeSignName}}) SelectOneBy{{$c.ColumnPascal}}(ctx context.
 
 {{end}}
 
-// {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
-var {{$t.TableGoTypeName}} = &{{$t.TableGoTypeSignName}}{
-{{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
-	columnType: map[string]string{
-{{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": "{{$c.GoType}}",{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
-	},
-	columnIndex: map[string]int{
-{{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": {{$j}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
-	},
-	columnAllowNull: map[string]int{
-{{range $j, $c := $t.Columns}}{{if eq $c.GoType $c.GoTypeBase}}{{continue}}{{end}}{{print "\t\t"}}"{{$c.Column}}": {{$j}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
-	},
-}
 {{end}}

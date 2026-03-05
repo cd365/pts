@@ -78,22 +78,22 @@ func (s *{{$t.TableGoTypeSignName}}) Insert(ctx context.Context, way *hey.Way, i
 	}).Insert(ctx)
 }
 
-func (s *{{$t.TableGoTypeSignName}}) Delete(ctx context.Context, way *hey.Way, where func(f hey.Filter)) (int64, error) {
+func (s *{{$t.TableGoTypeSignName}}) Delete(ctx context.Context, way *hey.Way, where func(w hey.Filter)) (int64, error) {
 	return way.Table(s.Table()).WhereFunc(where).Delete(ctx)
 }
 
-func (s *{{$t.TableGoTypeSignName}}) Update(ctx context.Context, way *hey.Way, update func(f hey.Filter, u hey.SQLUpdateSet)) (int64, error) {
-	return way.Table(s.Table()).UpdateFunc(func(f hey.Filter, u hey.SQLUpdateSet) {
+func (s *{{$t.TableGoTypeSignName}}) Update(ctx context.Context, way *hey.Way, update func(w hey.Filter, u hey.SQLUpdateSet)) (int64, error) {
+	return way.Table(s.Table()).UpdateFunc(func(w hey.Filter, u hey.SQLUpdateSet) {
 		u.Select(s.Column()...)
-		update(f, u)
+		update(w, u)
 	}).Update(ctx)
 }
 
-func (s *{{$t.TableGoTypeSignName}}) Upsert(ctx context.Context, way *hey.Way, upsert func(f hey.Filter, i hey.SQLInsert, u hey.SQLUpdateSet)) (mod int64, add int64, err error) {
+func (s *{{$t.TableGoTypeSignName}}) Upsert(ctx context.Context, way *hey.Way, upsert func(w hey.Filter, u hey.SQLUpdateSet, i hey.SQLInsert)) (mod int64, add int64, err error) {
 	table := way.Table(s.Table())
-	table.UpdateFunc(func(f hey.Filter, u hey.SQLUpdateSet) {
+	table.UpdateFunc(func(w hey.Filter, u hey.SQLUpdateSet) {
 		table.InsertFunc(func(i hey.SQLInsert) {
-			upsert(f, i, u)
+			upsert(w, u, i)
 		})
 	})
 	return hey.NewComplex(table).Upsert(ctx)
@@ -225,7 +225,7 @@ func (s *{{$t.TableGoTypeSignName}}) SelectOne(ctx context.Context, way *hey.Way
 	return lists[0], nil
 }
 
-func (s *{{$t.TableGoTypeSignName}}) filterSelect(filter func(f hey.Filter), options []func(table *hey.Table)) []func(table *hey.Table) {
+func (s *{{$t.TableGoTypeSignName}}) filterSelect(filter func(w hey.Filter), options []func(table *hey.Table)) []func(table *hey.Table) {
 	values := make([]func(table *hey.Table), 0, len(options)+1)
 	if filter != nil {
 		values = append(values, func(table *hey.Table) { table.WhereFunc(filter) })
@@ -239,15 +239,15 @@ func (s *{{$t.TableGoTypeSignName}}) filterSelect(filter func(f hey.Filter), opt
 {{range $j, $c := $t.Columns}}
 {{if ne $c.Column $s}}{{continue}}{{end}}
 func (s *{{$t.TableGoTypeSignName}}) SelectAllBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} []{{$c.GoTypeBase}}, options ...func(table *hey.Table)) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
-	return s.SelectAll(ctx, way, s.filterSelect(func(f hey.Filter) { f.In(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
+	return s.SelectAll(ctx, way, s.filterSelect(func(w hey.Filter) { w.In(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
 }
 
 func (s *{{$t.TableGoTypeSignName}}) SelectHasBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} {{$c.GoTypeBase}}, options ...func(table *hey.Table)) (bool, error) {
-	return s.SelectHas(ctx, way, s.filterSelect(func(f hey.Filter) { f.Equal(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
+	return s.SelectHas(ctx, way, s.filterSelect(func(w hey.Filter) { w.Equal(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
 }
 
 func (s *{{$t.TableGoTypeSignName}}) SelectOneBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} {{$c.GoTypeBase}}, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
-	return s.SelectOne(ctx, way, s.filterSelect(func(f hey.Filter) { f.Equal(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
+	return s.SelectOne(ctx, way, s.filterSelect(func(w hey.Filter) { w.Equal(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
 }
 {{break}}
 {{end}}

@@ -38,6 +38,9 @@ type MethodTableColumn struct {
 }
 
 type Config struct {
+	// Sign template sign
+	Sign string `yaml:"sign"`
+
 	// Database driver name, database connection, database schema name, database table prefix
 	Database struct {
 		Driver             string `yaml:"driver"`               // postgres
@@ -447,8 +450,8 @@ type Table struct {
 
 	AutoIncrementColumn string `db:"-"` // auto-increment column
 
-	TableGoTypeName          string `db:"-"` // table go type name struct
-	TableGoTypeNameTimestamp string `db:"-"` // table go type name struct + timestamp
+	TableGoTypeName     string `db:"-"` // table go type name struct
+	TableGoTypeSignName string `db:"-"` // table go type name struct with sign
 }
 
 type Column struct {
@@ -1023,7 +1026,11 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 					name = strings.TrimPrefix(name, config.Database.TablePrefix)
 				}
 				t.TableGoTypeName = Pascal(name)
-				t.TableGoTypeNameTimestamp = fmt.Sprintf("T%d%s", timestamp, t.TableGoTypeName)
+				sign := strings.ReplaceAll(config.Sign, " ", "")
+				if sign == "" {
+					sign = fmt.Sprintf("%d", timestamp)
+				}
+				t.TableGoTypeSignName = fmt.Sprintf("T%s%s", sign, t.TableGoTypeName)
 			}
 			for _, c := range t.Columns {
 				c.init(way)

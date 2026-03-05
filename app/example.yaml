@@ -1,3 +1,6 @@
+# Template sign
+sign:
+
 # Database configuration
 database:
     driver: postgres

@@ -4,8 +4,8 @@
 {{$t.Defined}}
 */
 
-// {{$t.TableGoTypeNameTimestamp}} {{$t.Table}} | {{$t.Comment}}
-type {{$t.TableGoTypeNameTimestamp}} struct {
+// {{$t.TableGoTypeSignName}} {{$t.Table}} | {{$t.Comment}}
+type {{$t.TableGoTypeSignName}} struct {
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}} string{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 
 	columnType map[string]string // column -> go type
@@ -14,22 +14,22 @@ type {{$t.TableGoTypeNameTimestamp}} struct {
 }
 
 // Table Get table name.
-func (s *{{$t.TableGoTypeNameTimestamp}}) Table() string {
+func (s *{{$t.TableGoTypeSignName}}) Table() string {
 	return "{{$t.Table}}" // {{$t.Comment}}
 }
 
 // Column Get table all columns.
-func (s *{{$t.TableGoTypeNameTimestamp}}) Column() []string {
+func (s *{{$t.TableGoTypeSignName}}) Column() []string {
     return []string{ {{range $j, $c := $t.Columns}}"{{$c.Column}}"{{if lt (add $j 1) (len $t.Columns)}}, {{end}}{{end}} }
 }
 
 // Comment Get table comment.
-func (s *{{$t.TableGoTypeNameTimestamp}}) Comment() string {
+func (s *{{$t.TableGoTypeSignName}}) Comment() string {
 	return "{{$t.Comment}}"
 }
 
 // ColumnType Get the mapping of column names to their corresponding types without modifying the returned map.
-func (s *{{$t.TableGoTypeNameTimestamp}}) ColumnType() map[string]string {
+func (s *{{$t.TableGoTypeSignName}}) ColumnType() map[string]string {
 	columnType := make(map[string]string, len(s.columnType))
 	maps.Copy(columnType, s.columnType)
 	return columnType
@@ -37,7 +37,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) ColumnType() map[string]string {
 
 {{$autoIncrementColumn := $t.AutoIncrementColumn}}{{if $.Config.AutoIncrementFilter}}/* Filter auto-increment */
 {{range $j, $c := $t.Columns}}{{if and (eq $c.Column $autoIncrementColumn) ( or (eq $c.GoType "int") (eq $c.GoType "int64") (eq $c.GoType "uint") (eq $c.GoType "uint64") )}}
-func (s *{{$t.TableGoTypeNameTimestamp}}) {{$c.ColumnPascal}}Eq(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
+func (s *{{$t.TableGoTypeSignName}}) {{$c.ColumnPascal}}Eq(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
 	return func(f hey.Filter) {
 		f.Equal(s.{{$c.ColumnPascal}}, value)
 		for _, filter := range filters {
@@ -48,7 +48,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) {{$c.ColumnPascal}}Eq(value {{$c.GoTyp
 	}
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) {{$c.ColumnPascal}}In(values ...any) func(f hey.Filter) {
+func (s *{{$t.TableGoTypeSignName}}) {{$c.ColumnPascal}}In(values ...any) func(f hey.Filter) {
 	return func(f hey.Filter) {
 		f.In(s.{{$c.ColumnPascal}}, values...)
 	}
@@ -57,25 +57,25 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) {{$c.ColumnPascal}}In(values ...any) f
 
 {{$packageTable := $.Config.PackageTable}}/* Single table default actions */
 {{if and $.Config.SingleTableDefault (ne $packageTable "")}}
-func (s *{{$t.TableGoTypeNameTimestamp}}) Insert(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) (int64, error) {
+func (s *{{$t.TableGoTypeSignName}}) Insert(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) (int64, error) {
 	return way.Table(s.Table()).InsertFunc(func(i hey.SQLInsert) {
 		i.Select(s.Column()...)
 		insert(i)
 	}).Insert(ctx)
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) Delete(ctx context.Context, way *hey.Way, where func(f hey.Filter)) (int64, error) {
+func (s *{{$t.TableGoTypeSignName}}) Delete(ctx context.Context, way *hey.Way, where func(f hey.Filter)) (int64, error) {
 	return way.Table(s.Table()).WhereFunc(where).Delete(ctx)
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) Update(ctx context.Context, way *hey.Way, update func(f hey.Filter, u hey.SQLUpdateSet)) (int64, error) {
+func (s *{{$t.TableGoTypeSignName}}) Update(ctx context.Context, way *hey.Way, update func(f hey.Filter, u hey.SQLUpdateSet)) (int64, error) {
 	return way.Table(s.Table()).UpdateFunc(func(f hey.Filter, u hey.SQLUpdateSet) {
 		u.Select(s.Column()...)
 		update(f, u)
 	}).Update(ctx)
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) Upsert(ctx context.Context, way *hey.Way, upsert func(f hey.Filter, i hey.SQLInsert, u hey.SQLUpdateSet)) (mod int64, add int64, err error) {
+func (s *{{$t.TableGoTypeSignName}}) Upsert(ctx context.Context, way *hey.Way, upsert func(f hey.Filter, i hey.SQLInsert, u hey.SQLUpdateSet)) (mod int64, add int64, err error) {
 	table := way.Table(s.Table())
 	table.UpdateFunc(func(f hey.Filter, u hey.SQLUpdateSet) {
 		table.InsertFunc(func(i hey.SQLInsert) {
@@ -85,7 +85,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) Upsert(ctx context.Context, way *hey.W
 	return hey.NewComplex(table).Upsert(ctx)
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) allScan(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s *{{$t.TableGoTypeSignName}}) allScan(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	lists := make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
 	for rows.Next() {
 		v := &{{$packageTable}}.{{$t.TableGoTypeName}}{}{{range $j, $c := $t.Columns}}{{if ne $c.GoType $c.GoTypeBase}}{{print "\n\t\t"}}v.{{$c.ColumnPascal}} = new({{$c.GoTypeBase}}){{if lt (add $j 1) (len $t.Columns)}}{{end}}{{end}}{{end}}
@@ -99,7 +99,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) allScan(rows *sql.Rows) ([]*{{$package
 	return lists, nil
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) matchScan(rows *sql.Rows, rowsColumns []string) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
+func (s *{{$t.TableGoTypeSignName}}) matchScan(rows *sql.Rows, rowsColumns []string) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
 	columnIndex := s.columnIndex
 	if len(rowsColumns) == 0 {
 		rowsColumns, err = rows.Columns()
@@ -140,7 +140,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) matchScan(rows *sql.Rows, rowsColumns 
 	return lists, nil
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) autoScan(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s *{{$t.TableGoTypeSignName}}) autoScan(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	rowsColumns, err := rows.Columns()
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) autoScan(rows *sql.Rows) ([]*{{$packag
 	return s.allScan(rows)
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) SelectAll(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
+func (s *{{$t.TableGoTypeSignName}}) SelectAll(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
 	table := way.Table(s.Table())
 	for _, option := range options {
 		if option != nil {
@@ -188,7 +188,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) SelectAll(ctx context.Context, way *he
 	return lists, nil
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) SelectHas(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (bool, error) {
+func (s *{{$t.TableGoTypeSignName}}) SelectHas(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (bool, error) {
 	table := way.Table(s.Table())
 	for _, option := range options {
 		if option != nil {
@@ -198,7 +198,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) SelectHas(ctx context.Context, way *he
 	return way.QueryExists(ctx, table.ToExists())
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) SelectOne(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s *{{$t.TableGoTypeSignName}}) SelectOne(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	options = append(options, func(table *hey.Table) {
 		table.Limit(1)
 	})
@@ -212,7 +212,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) SelectOne(ctx context.Context, way *he
 	return lists[0], nil
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) filterSelect(filter func(f hey.Filter), options []func(table *hey.Table)) []func(table *hey.Table) {
+func (s *{{$t.TableGoTypeSignName}}) filterSelect(filter func(f hey.Filter), options []func(table *hey.Table)) []func(table *hey.Table) {
 	values := make([]func(table *hey.Table), 0, len(options)+1)
 	if filter != nil {
 		values = append(values, func(table *hey.Table) { table.WhereFunc(filter) })
@@ -225,15 +225,15 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) filterSelect(filter func(f hey.Filter)
 {{range $i, $s := $config.Select}}
 {{range $j, $c := $t.Columns}}
 {{if ne $c.Column $s}}{{continue}}{{end}}
-func (s *{{$t.TableGoTypeNameTimestamp}}) SelectAllBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} []{{$c.GoTypeBase}}, options ...func(table *hey.Table)) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s *{{$t.TableGoTypeSignName}}) SelectAllBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} []{{$c.GoTypeBase}}, options ...func(table *hey.Table)) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	return s.SelectAll(ctx, way, s.filterSelect(func(f hey.Filter) { f.In(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) SelectHasBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} {{$c.GoTypeBase}}, options ...func(table *hey.Table)) (bool, error) {
+func (s *{{$t.TableGoTypeSignName}}) SelectHasBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} {{$c.GoTypeBase}}, options ...func(table *hey.Table)) (bool, error) {
 	return s.SelectHas(ctx, way, s.filterSelect(func(f hey.Filter) { f.Equal(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) SelectOneBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} {{$c.GoTypeBase}}, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s *{{$t.TableGoTypeSignName}}) SelectOneBy{{$c.ColumnPascal}}(ctx context.Context, way *hey.Way, {{$c.ColumnCamel}} {{$c.GoTypeBase}}, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	return s.SelectOne(ctx, way, s.filterSelect(func(f hey.Filter) { f.Equal(s.{{$c.ColumnPascal}}, {{$c.ColumnCamel}}) }, options)...)
 }
 {{break}}
@@ -244,7 +244,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) SelectOneBy{{$c.ColumnPascal}}(ctx con
 {{end}}
 
 // {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
-var {{$t.TableGoTypeName}} = &{{$t.TableGoTypeNameTimestamp}}{
+var {{$t.TableGoTypeName}} = &{{$t.TableGoTypeSignName}}{
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 	columnType: map[string]string{
 {{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": "{{$c.GoType}}",{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}

@@ -37,7 +37,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) ColumnType() map[string]string {
 
 {{$autoIncrementColumn := $t.AutoIncrementColumn}}{{if $.Config.AutoIncrementFilter}}/* Filter auto-increment */
 {{range $j, $c := $t.Columns}}{{if and (eq $c.Column $autoIncrementColumn) ( or (eq $c.GoType "int") (eq $c.GoType "int64") (eq $c.GoType "uint") (eq $c.GoType "uint64") )}}
-func (s *{{$t.TableGoTypeNameTimestamp}}) Filter{{$c.ColumnPascal}}Eq(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
+func (s *{{$t.TableGoTypeNameTimestamp}}) {{$c.ColumnPascal}}Eq(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
 	return func(f hey.Filter) {
 		f.Equal(s.{{$c.ColumnPascal}}, value)
 		for _, filter := range filters {
@@ -48,7 +48,7 @@ func (s *{{$t.TableGoTypeNameTimestamp}}) Filter{{$c.ColumnPascal}}Eq(value {{$c
 	}
 }
 
-func (s *{{$t.TableGoTypeNameTimestamp}}) Filter{{$c.ColumnPascal}}In(values ...any) func(f hey.Filter) {
+func (s *{{$t.TableGoTypeNameTimestamp}}) {{$c.ColumnPascal}}In(values ...any) func(f hey.Filter) {
 	return func(f hey.Filter) {
 		f.In(s.{{$c.ColumnPascal}}, values...)
 	}

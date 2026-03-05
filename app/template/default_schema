@@ -49,27 +49,8 @@ func (s *{{$t.TableGoTypeSignName}}) ColumnType() map[string]string {
 	return columnType
 }
 
-{{$autoIncrementColumn := $t.AutoIncrementColumn}}{{if $.Config.AutoIncrementFilter}}/* Filter auto-increment */
-{{range $j, $c := $t.Columns}}{{if and (eq $c.Column $autoIncrementColumn) ( or (eq $c.GoType "int") (eq $c.GoType "int64") (eq $c.GoType "uint") (eq $c.GoType "uint64") )}}
-func (s *{{$t.TableGoTypeSignName}}) {{$c.ColumnPascal}}Eq(value {{$c.GoType}}, filters ...func(f hey.Filter)) func(f hey.Filter) {
-	return func(f hey.Filter) {
-		f.Equal(s.{{$c.ColumnPascal}}, value)
-		for _, filter := range filters {
-			if filter != nil {
-				filter(f)
-			}
-		}
-	}
-}
-
-func (s *{{$t.TableGoTypeSignName}}) {{$c.ColumnPascal}}In(values ...any) func(f hey.Filter) {
-	return func(f hey.Filter) {
-		f.In(s.{{$c.ColumnPascal}}, values...)
-	}
-}
-{{break}}{{end}}{{end}}{{end}}
-
-{{$packageTable := $.Config.PackageTable}}/* Single table default actions */
+/* Single table default actions */
+{{$packageTable := $.Config.PackageTable}}
 {{if and $.Config.SingleTableDefault (ne $packageTable "")}}
 func (s *{{$t.TableGoTypeSignName}}) Insert(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) (int64, error) {
 	return way.Table(s.Table()).InsertFunc(func(i hey.SQLInsert) {

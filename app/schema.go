@@ -38,9 +38,6 @@ type MethodTableColumn struct {
 }
 
 type Config struct {
-	// Sign template sign
-	Sign string `yaml:"sign"`
-
 	// Database driver name, database connection, database schema name, database table prefix
 	Database struct {
 		Driver             string `yaml:"driver"`               // postgres
@@ -74,8 +71,10 @@ type Config struct {
 	// Only export the following tables
 	OnlyTable []string `yaml:"only_table"`
 
-	// AutoIncrementFilter When true, generate filter functions for auto-increment column
-	AutoIncrementFilter bool `yaml:"auto_increment_filter"`
+	/* schema module */
+
+	// Sign template sign
+	Sign string `yaml:"sign"`
 
 	// PackageTable Package name of the generated table struct
 	PackageTable string `yaml:"package_table"`

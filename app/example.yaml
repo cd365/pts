@@ -1,6 +1,3 @@
-# Template sign
-sign:
-
 # Database configuration
 database:
     driver: postgres
@@ -44,9 +41,11 @@ template_file_replace: replace this with a custom-replace template path
 template_file_schema: replace this with a custom-schema template path
 template_file_table: replace this with a custom-table template path
 
-auto_increment_filter: true
+# schema module template sign
+sign: 01
 
-package_table: model
+# schema module template method configs.
+package_table: table
 single_table_default: true
 method_table_column:
     employee:

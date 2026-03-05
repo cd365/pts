@@ -100,7 +100,6 @@ func (s *{{$t.TableGoTypeSignName}}) allScan(rows *sql.Rows) ([]*{{$packageTable
 }
 
 func (s *{{$t.TableGoTypeSignName}}) matchScan(rows *sql.Rows, rowsColumns []string) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
-	columnIndex := s.columnIndex
 	if len(rowsColumns) == 0 {
 		rowsColumns, err = rows.Columns()
 		if err != nil {
@@ -111,7 +110,7 @@ func (s *{{$t.TableGoTypeSignName}}) matchScan(rows *sql.Rows, rowsColumns []str
 	rowsScan := make([]int, length)
 	rowsScanMap := make(map[string]int, length)
 	for i, column := range rowsColumns {
-		index, ok := columnIndex[column]
+		index, ok := s.columnIndex[column]
 		if !ok {
 			return nil, fmt.Errorf("match-scan mismatched column: %s", column)
 		}

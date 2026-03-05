@@ -59,8 +59,18 @@ func (s *{{$t.TableGoTypeSignName}}) Insert(ctx context.Context, way *hey.Way, i
 	}).Insert(ctx)
 }
 
+func (s *{{$t.TableGoTypeSignName}}) InsertSimple(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) error {
+	_, err := s.Insert(ctx, way, insert)
+	return err
+}
+
 func (s *{{$t.TableGoTypeSignName}}) Delete(ctx context.Context, way *hey.Way, where func(w hey.Filter)) (int64, error) {
 	return way.Table(s.Table()).WhereFunc(where).Delete(ctx)
+}
+
+func (s *{{$t.TableGoTypeSignName}}) DeleteSimple(ctx context.Context, way *hey.Way, where func(w hey.Filter)) error {
+	_, err := s.Delete(ctx, way, where)
+	return err
 }
 
 func (s *{{$t.TableGoTypeSignName}}) Update(ctx context.Context, way *hey.Way, update func(w hey.Filter, u hey.SQLUpdateSet)) (int64, error) {
@@ -68,6 +78,11 @@ func (s *{{$t.TableGoTypeSignName}}) Update(ctx context.Context, way *hey.Way, u
 		u.Select(s.Column()...)
 		update(w, u)
 	}).Update(ctx)
+}
+
+func (s *{{$t.TableGoTypeSignName}}) UpdateSimple(ctx context.Context, way *hey.Way, update func(w hey.Filter, u hey.SQLUpdateSet)) error {
+	_, err := s.Update(ctx, way, update)
+	return err
 }
 
 func (s *{{$t.TableGoTypeSignName}}) Upsert(ctx context.Context, way *hey.Way, upsert func(w hey.Filter, u hey.SQLUpdateSet, i hey.SQLInsert)) (mod int64, add int64, err error) {
@@ -78,6 +93,11 @@ func (s *{{$t.TableGoTypeSignName}}) Upsert(ctx context.Context, way *hey.Way, u
 		})
 	})
 	return hey.NewComplex(table).Upsert(ctx)
+}
+
+func (s *{{$t.TableGoTypeSignName}}) UpsertSimple(ctx context.Context, way *hey.Way, upsert func(w hey.Filter, u hey.SQLUpdateSet, i hey.SQLInsert)) error {
+	_, _, err := s.Upsert(ctx, way, upsert)
+	return err
 }
 
 func (s *{{$t.TableGoTypeSignName}}) scanAll(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {

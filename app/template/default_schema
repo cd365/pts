@@ -100,6 +100,15 @@ func (s *{{$t.TableGoTypeSignName}}) UpsertSimple(ctx context.Context, way *hey.
 	return err
 }
 
+func (s *{{$t.TableGoTypeSignName}}) DeleteInsert(ctx context.Context, way *hey.Way, where func(w hey.Filter), insert func(i hey.SQLInsert)) error {
+	_, err := s.Delete(ctx, way, where)
+	if err != nil {
+		return err
+	}
+	_, err = s.Insert(ctx, way, insert)
+	return err
+}
+
 func (s *{{$t.TableGoTypeSignName}}) scanAll(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	lists := make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
 	for rows.Next() {

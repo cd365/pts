@@ -8,14 +8,21 @@
 type {{$t.TableGoTypeSignName}} struct {
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}} string{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 
+	columnList []string // all columns
 	columnType map[string]string // column -> go type
 	columnIndex map[string]int // column -> index, the minimum value is 0
 	columnAllowNull map[string]int // column -> index, all columns that allow null value
 }
 
+/*
+It is recommended that you copy the following column list (table: {{$t.Table}}):
+{{range $j, $c := $t.Columns}}{{print "\t"}}t69.{{$c.ColumnPascal}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+*/
+
 // {{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
 var {{$t.TableGoTypeName}} = &{{$t.TableGoTypeSignName}}{
 {{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}}: "{{$c.Column}}",{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	columnList: []string{ {{range $j, $c := $t.Columns}}"{{$c.Column}}"{{if lt (add $j 1) (len $t.Columns)}}, {{end}}{{end}} },
 	columnType: map[string]string{
 {{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": "{{$c.GoType}}",{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 	},
@@ -34,7 +41,7 @@ func (s *{{$t.TableGoTypeSignName}}) Table() string {
 
 // Column Get table all columns.
 func (s *{{$t.TableGoTypeSignName}}) Column() []string {
-    return []string{ {{range $j, $c := $t.Columns}}"{{$c.Column}}"{{if lt (add $j 1) (len $t.Columns)}}, {{end}}{{end}} }
+    return s.columnList[:]
 }
 
 // Comment Get table comment.
@@ -47,6 +54,17 @@ func (s *{{$t.TableGoTypeSignName}}) ColumnType() map[string]string {
 	columnType := make(map[string]string, len(s.columnType))
 	maps.Copy(columnType, s.columnType)
 	return columnType
+}
+
+// ColumnValueMatch Extract valid data from the map.
+func (s *{{$t.TableGoTypeSignName}}) ColumnValueMatch(data map[string]any) map[string]any {
+	result := make(map[string]any, len(data))
+	for column, value := range data {
+		if _, ok := s.columnType[column]; ok {
+			result[column] = value
+		}
+	}
+	return result
 }
 
 /* Single table default actions */
@@ -169,13 +187,12 @@ func (s *{{$t.TableGoTypeSignName}}) scanAuto(rows *sql.Rows) ([]*{{$packageTabl
 		return nil, err
 	}
 	length := len(rowsColumns)
-	columns := s.Column()
-	length1 := len(columns)
+	length1 := len(s.columnList)
 	if length != length1 {
 		return s.scanPart(rows, rowsColumns)
 	}
 	for i := 0; i < length; i++ {
-		if rowsColumns[i] != columns[i] {
+		if rowsColumns[i] != s.columnList[i] {
 			return s.scanPart(rows, rowsColumns)
 		}
 	}

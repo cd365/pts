@@ -41,7 +41,9 @@ func (s *{{$t.TableGoTypeSignName}}) Table() string {
 
 // Column Get table all columns.
 func (s *{{$t.TableGoTypeSignName}}) Column() []string {
-    return s.columnList[:]
+    result := make([]string, len(s.columnList))
+    copy(result, s.columnList)
+    return result
 }
 
 // Comment Get table comment.

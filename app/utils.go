@@ -1,7 +1,11 @@
 package app
 
 import (
+	"errors"
+	"io"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"strings"
 	"unsafe"
 )
@@ -119,4 +123,49 @@ func RandomString(length int, chars ...byte) string {
 		randoms = append(randoms, chars[rand.IntN(count)])
 	}
 	return string(randoms)
+}
+
+// RemoveCreateFile If the file exists, delete it first and then create it.
+func RemoveCreateFile(filename string) (*os.File, error) {
+	dir := filepath.Dir(filename)
+	if _, err := os.Stat(dir); err != nil {
+		if err = os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := os.Stat(filename); err == nil {
+		if err = os.Remove(filename); err != nil {
+			return nil, err
+		}
+	}
+	return os.Create(filename)
+}
+
+// WriteFileIfNotExists Write file if not exists.
+func WriteFileIfNotExists(filename string, content io.Reader) error {
+	dir := filepath.Dir(filename)
+	if _, err := os.Stat(dir); err != nil {
+		if err = os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat(filename); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	} else {
+		if IsDebug() {
+			_ = os.Remove(filename)
+		}
+	}
+	fil, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer fil.Close()
+	_, err = io.Copy(fil, content)
+	if err != nil {
+		return err
+	}
+	return nil
 }

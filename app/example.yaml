@@ -10,13 +10,13 @@ database:
     database_schema_name: public
     table_prefix: pre_
 
-# Table filter regular expression or actual table name
+# Table filter regular expression or actual table name.
 disable_table:
     - ^disable_.*$
     - ^example_.*$
     - system_table_name
 
-# Custom override comment
+# Custom override comment.
 comments:
     example_test:
         comment: example test table comment
@@ -33,21 +33,23 @@ comments:
             name: Name
             updated_at: updated timestamp
 
-# Custom template file path.
-# Make sure the route is real and valid.
-# You can leave it empty if not needed.
-template_file_custom: replace this with a custom template path
-template_file_replace: replace this with a custom-replace template path
-template_file_schema: replace this with a custom-schema template path
-template_file_table: replace this with a custom-table template path
-
-# schema module template sign
 sign: 01
+model_package: model
 
-# schema module template method configs.
-package_table: table
-single_table_default: true
-method_table_column:
+# Custom template configuration.
+template_file_custom: replace this with a `custom` template path
+template_file_replace: replace this with a `replace` template path
+template_file_schema: replace this with a `schema` template path
+template_file_model: replace this with a `model` template path
+template_table:
+    - template_file:
+      output_file_directory:
+      output_file_name_suffix: _admin
+      output_go_file_package_name: schema
+
+# Schema output configuration.
+output_schema_methods: true
+output_schema_table_column_methods:
     employee:
         select:
             - email

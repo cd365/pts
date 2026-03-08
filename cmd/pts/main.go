@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cd365/hey/v7"
 	"github.com/cd365/pts/app"
@@ -13,8 +14,14 @@ import (
 )
 
 const (
-	flagConfigure = "config"
-	flagTable     = "table"
+	flagConfigure       = "config"
+	flagTable           = "table"
+	flagTemplateFile    = "template_file"
+	flagTemplateDefault = "template_default"
+
+	flagTableUsage           = "Only table lists, multiple uses ',' concatenation. Example: table1,table2,table3..."
+	flagTemplateFileUsage    = "Use a custom template file"
+	flagTemplateDefaultUsage = "Output default template content"
 )
 
 var rootCmd = &cobra.Command{
@@ -45,10 +52,45 @@ func main() {
 				return start(cmd, args, app.CmdCustom)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "pts-custom.yaml", "Custom configure file path. PTS_CUSTOM_CONFIG")
-		cmd.Flags().StringP(flagTable, "t", "", "Only table lists, multiple uses ',' concatenation. Example: table1,table2,table3...")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_CUSTOM_CONFIG")
+		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
+		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
+		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
 		rootCmd.AddCommand(cmd)
 	}
+
+	{
+		cmd := &cobra.Command{
+			Use:   app.CmdModel,
+			Short: "Table structure mapped to Go struct",
+			Long:  "Parse the database table structure and define the corresponding Go structs",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return start(cmd, args, app.CmdModel)
+			},
+		}
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_MODEL_CONFIG")
+		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
+		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
+		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
+		rootCmd.AddCommand(cmd)
+	}
+
+	{
+		cmd := &cobra.Command{
+			Use:   app.CmdSchema,
+			Short: "Table structure and common methods",
+			Long:  "Parse database table structures into non-hard-coded structures in Go, preventing the use of hard-coded data in the code",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return start(cmd, args, app.CmdSchema)
+			},
+		}
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_SCHEMA_CONFIG")
+		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
+		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
+		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
+		rootCmd.AddCommand(cmd)
+	}
+
 	{
 		cmd := &cobra.Command{
 			Use:   app.CmdReplace,
@@ -58,36 +100,25 @@ func main() {
 				return start(cmd, args, app.CmdReplace)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "pts-replace.yaml", "Replace configure file path. PTS_REPLACE_CONFIG")
-		cmd.Flags().StringP(flagTable, "t", "", "Only table lists, multiple uses ',' concatenation. Example: table1,table2,table3...")
-		rootCmd.AddCommand(cmd)
-	}
-
-	{
-		cmd := &cobra.Command{
-			Use:   app.CmdSchema,
-			Short: "Database table structure",
-			Long:  "Parse database table structures into non-hard-coded structures in Go, preventing the use of hard-coded data in the code",
-			RunE: func(cmd *cobra.Command, args []string) error {
-				return start(cmd, args, app.CmdSchema)
-			},
-		}
-		cmd.Flags().StringP(flagConfigure, "c", "pts-schema.yaml", "Schema configure file path. PTS_SCHEMA_CONFIG")
-		cmd.Flags().StringP(flagTable, "t", "", "Only table lists, multiple uses ',' concatenation. Example: table1,table2,table3...")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_REPLACE_CONFIG")
+		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
+		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
+		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
 		rootCmd.AddCommand(cmd)
 	}
 
 	{
 		cmd := &cobra.Command{
 			Use:   app.CmdTable,
-			Short: "Database table data",
-			Long:  "Parse the database table structure and define the corresponding Go structs",
+			Short: "Output template code to a file for a single table structure",
+			Long:  "Output template code to a file for a single table structure, usually the file has a specific suffix.",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return start(cmd, args, app.CmdTable)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "pts-table.yaml", "Table configure file path. PTS_TABLE_CONFIG")
-		cmd.Flags().StringP(flagTable, "t", "", "Only table lists, multiple uses ',' concatenation. Example: table1,table2,table3...")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_TABLE_CONFIG")
+		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
+		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
 		rootCmd.AddCommand(cmd)
 	}
 
@@ -97,27 +128,47 @@ func main() {
 }
 
 func start(cmd *cobra.Command, args []string, command string) error {
-	configFile, err := cmd.Flags().GetString(flagConfigure)
-	if err != nil {
-		return err
+	{
+		// Whether to output the default template content.
+		if value, err := cmd.Flags().GetBool(flagTemplateDefault); err == nil && value {
+			_, err = os.Stdout.Write(app.DefaultTemplateContent(command))
+			return err
+		}
 	}
-	// Try to get the configuration file path from the environment variables
-	if _, err = os.Stat(configFile); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			key := fmt.Sprintf("PTS_%s_CONFIG", strings.ToUpper(command))
-			if value := os.Getenv(key); value != "" {
-				if _, err = os.Stat(value); err == nil {
-					configFile = value
-				}
+
+	configFile := ""
+	// Get the configuration file path from the env.
+	{
+		key := fmt.Sprintf("PTS_%s_CONFIG", strings.ToUpper(command))
+		if value := os.Getenv(key); value != "" {
+			if _, err := os.Stat(value); err == nil {
+				configFile = value
 			}
 		}
 	}
+
+	// Get the configuration file path from the command line.
+	{
+		value, err := cmd.Flags().GetString(flagConfigure)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stat(value); err == nil {
+			configFile = value
+		}
+	}
+
+	if configFile == "" {
+		return errors.New("please set up the configuration file first")
+	}
+
 	cli, err := app.NewApp(configFile)
 	if err != nil {
 		return err
 	}
 
 	{
+		// Use the given database table.
 		values := ""
 		values, err = cmd.Flags().GetString(flagTable)
 		if err != nil {
@@ -135,13 +186,33 @@ func start(cmd *cobra.Command, args []string, command string) error {
 		}
 	}
 
-	output, err := cli.Run(context.Background(), cli.NewOutput(command))
+	{
+		// Replace the default template file in the configuration file.
+		value := ""
+		value, err = cmd.Flags().GetString(flagTemplateFile)
+		if err == nil {
+			if _, err = os.Stat(value); err == nil {
+				switch command {
+				case app.CmdCustom:
+					cli.Cfg().TemplateFileCustom = value
+				case app.CmdModel:
+					cli.Cfg().TemplateFileModel = value
+				case app.CmdSchema:
+					cli.Cfg().TemplateFileSchema = value
+				case app.CmdReplace:
+					cli.Cfg().TemplateFileReplace = value
+				}
+			}
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*30)
+	defer cancel()
+
+	err = cli.Run(ctx, command, args)
 	if err != nil {
 		return err
 	}
-	_, err = os.Stdout.Write(output)
-	if err != nil {
-		return err
-	}
-	return err
+
+	return nil
 }

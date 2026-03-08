@@ -12,18 +12,20 @@ var (
 	pgsqlFuncDrop string
 )
 
-//go:embed template/template_data
-var templateData []byte
-
 var (
+	defaultCustomTemplate = make([]byte, 0)
+
+	//go:embed template/default_model
+	defaultModelTemplate []byte
+
 	//go:embed template/default_schema
 	defaultSchemaTemplate []byte
 
-	//go:embed template/default_table
-	defaultTableTemplate []byte
-
 	//go:embed template/default_replace
 	defaultReplaceTemplate []byte
+
+	//go:embed template/default_table
+	defaultTableTemplate []byte
 )
 
 //go:embed example.yaml

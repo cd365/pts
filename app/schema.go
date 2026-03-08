@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -25,19 +26,42 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const (
-	CmdConfig  = "config"
-	CmdCustom  = "custom"
-	CmdReplace = "replace"
-	CmdSchema  = "schema"
-	CmdTable   = "table"
+var (
+	Mode        = "PRODUCTION"
+	GitCommitId = ""
 )
 
-type MethodTableColumn struct {
-	Select []string `yaml:"select"`
+func IsDebug() bool {
+	return strings.ToUpper(Mode) == "DEBUG"
+}
+
+const (
+	CmdConfig = "config"
+
+	CmdCustom  = "custom"
+	CmdModel   = "model"
+	CmdSchema  = "schema"
+	CmdReplace = "replace"
+
+	CmdTable = "table"
+)
+
+type SchemaTableColumnMethods struct {
+	Select []string `yaml:"select"` // columns for query
+}
+
+// TemplateTable Config command table
+type TemplateTable struct {
+	TemplateFile            string `yaml:"template_file"`
+	OutputFileDirectory     string `yaml:"output_file_directory"`
+	OutputFileNameSuffix    string `yaml:"output_file_name_suffix"`
+	OutputGoFilePackageName string `yaml:"output_go_file_package_name"`
 }
 
 type Config struct {
+	// GitCommitId Git commit id
+	GitCommitId string `yaml:"-"`
+
 	// Database driver name, database connection, database schema name, database table prefix
 	Database struct {
 		Driver             string `yaml:"driver"`               // postgres
@@ -62,26 +86,27 @@ type Config struct {
 		Columns map[string]string `yaml:"columns"`
 	} `yaml:"comments"`
 
-	// Custom template file, default template file will be used if not set
-	TemplateFileCustom  string `yaml:"template_file_custom"`
-	TemplateFileReplace string `yaml:"template_file_replace"`
-	TemplateFileSchema  string `yaml:"template_file_schema"`
-	TemplateFileTable   string `yaml:"template_file_table"`
+	// Custom template configuration.
+	TemplateFileCustom  string           `yaml:"template_file_custom"`
+	TemplateFileModel   string           `yaml:"template_file_model"`
+	TemplateFileSchema  string           `yaml:"template_file_schema"`
+	TemplateFileReplace string           `yaml:"template_file_replace"`
+	TemplateTable       []*TemplateTable `yaml:"template_table"`
 
 	// Only export the following tables
 	OnlyTable []string `yaml:"only_table"`
 
-	/* schema module */
-
 	// Sign template sign
 	Sign string `yaml:"sign"`
+	// ModelPackage Package name of the generated table struct
+	ModelPackage string `yaml:"model_package"`
 
-	// PackageTable Package name of the generated table struct
-	PackageTable string `yaml:"package_table"`
-	// SingleTableDefault Single table default actions
-	SingleTableDefault bool `yaml:"single_table_default"`
-	// MethodTableColumn Method of table-column
-	MethodTableColumn map[string]*MethodTableColumn `yaml:"method_table_column"`
+	/* schema module */
+
+	// OutputSchemaMethods Single table default actions
+	OutputSchemaMethods bool `yaml:"output_schema_methods"`
+	// SchemaTableColumnMethods Method of table-column
+	OutputSchemaTableColumnMethods map[string]*SchemaTableColumnMethods `yaml:"output_schema_table_column_methods"`
 }
 
 // exampleConfig Config example
@@ -123,10 +148,26 @@ func exampleConfig() ([]byte, error) {
 			},
 		},
 	}
-	c.TemplateFileCustom = "replace this with a custom template path"
-	c.TemplateFileReplace = "replace this with a custom-replace template path"
-	c.TemplateFileSchema = "replace this with a custom-schema template path"
-	c.TemplateFileTable = "replace this with a custom-table template path"
+	c.Sign = "01"
+	c.ModelPackage = "model"
+	c.TemplateFileCustom = "replace this with a `custom` template path"
+	c.TemplateFileReplace = "replace this with a `replace` template path"
+	c.TemplateFileSchema = "replace this with a `schema` template path"
+	c.TemplateFileModel = "replace this with a `model` template path"
+	c.TemplateTable = []*TemplateTable{
+		{
+			TemplateFile:            "",
+			OutputFileDirectory:     "",
+			OutputFileNameSuffix:    "_admin",
+			OutputGoFilePackageName: "schema",
+		},
+	}
+	c.OutputSchemaMethods = true
+	c.OutputSchemaTableColumnMethods = map[string]*SchemaTableColumnMethods{
+		"employee": {
+			Select: []string{"email", "username"},
+		},
+	}
 	out, err := yaml.Marshal(c)
 	if err != nil {
 		return nil, err
@@ -160,6 +201,7 @@ func ParseConfig(configFile string) (*Config, error) {
 
 // initConfigDisableTable Configuration Initialization
 func initConfigDisableTable(cfg *Config) {
+	cfg.GitCommitId = GitCommitId
 	for _, v := range cfg.DisableTable {
 		v = strings.TrimSpace(v)
 		if strings.HasPrefix(v, "^") && strings.HasSuffix(v, "$") {
@@ -266,6 +308,24 @@ func NewTemplate(name string, content []byte, funcMap map[string]any) *template.
 	return template.Must(template.New(name).Delims("{{", "}}").Funcs(funcMap).Parse(*(*string)(unsafe.Pointer(&content))))
 }
 
+func DefaultTemplateContent(cmd string) (content []byte) {
+	switch cmd {
+	case CmdCustom:
+		content = defaultCustomTemplate
+	case CmdModel:
+		content = defaultModelTemplate
+	case CmdSchema:
+		content = defaultSchemaTemplate
+	case CmdReplace:
+		content = defaultReplaceTemplate
+	case CmdTable:
+		content = defaultTableTemplate
+	default:
+		return
+	}
+	return content
+}
+
 type App struct {
 	cfg    *Config
 	way    *hey.Way
@@ -295,8 +355,8 @@ func (s *App) Cfg() *Config {
 	return s.cfg
 }
 
-func (s *App) Run(ctx context.Context, output func(ctx context.Context, tmp *Template) (content []byte, err error)) (content []byte, err error) {
-	if output == nil {
+func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
+	if cmd == "" {
 		return
 	}
 
@@ -313,16 +373,9 @@ func (s *App) Run(ctx context.Context, output func(ctx context.Context, tmp *Tem
 		return
 	}
 
-	tmp := &Template{
-		Config: s.cfg,
-		Tables: tables,
-	}
-
-	// Remove duplicate column names
-	allColumns := make(map[string]*struct{})
-	for _, table := range tables {
+	{
 		// replace empty comment
-		{
+		for _, table := range tables {
 			va, ok := s.cfg.Comments[table.Table]
 			if ok {
 				if va.Comment != "" {
@@ -342,26 +395,110 @@ func (s *App) Run(ctx context.Context, output func(ctx context.Context, tmp *Tem
 				}
 			}
 		}
-		// all table columns
-		for _, column := range table.Columns {
-			_, ok := allColumns[column.Column]
-			if ok {
-				continue
+	}
+
+	// 1. Write directly to the file.
+	if cmd == CmdTable {
+		configs := s.cfg.TemplateTable
+		length := len(configs)
+		if length == 0 {
+			return
+		}
+		var content []byte
+		for index, config := range configs {
+			content, err = getTemplateFileContent(config.TemplateFile, defaultTableTemplate)
+			if err != nil {
+				return
 			}
-			allColumns[column.Column] = nil
-			tmp.AllTableColumns = append(tmp.AllTableColumns, column.Column)
+			suffix := config.OutputFileNameSuffix
+			if suffix == "" {
+				suffix = "_admin"
+			}
+			goPackageName := config.OutputGoFilePackageName
+			if goPackageName == "" {
+				goPackageName = "schema"
+			}
+			for _, table := range tables {
+				buf := bytes.NewBuffer(nil)
+				templateName := fmt.Sprintf("%s_%d", cmd, index)
+				err = s.newTemplateWithFuncMap(templateName, content).Execute(buf, table)
+				if err != nil {
+					return
+				}
+				b := bytes.NewBuffer(nil)
+				b.WriteString("package ")
+				b.WriteString(goPackageName)
+				b.WriteString("\n\n")
+				b.Write(buf.Bytes())
+				filename := filepath.Join(config.OutputFileDirectory, fmt.Sprintf("%s%s.go", table.Table, suffix))
+				err = WriteFileIfNotExists(filename, b)
+				if err != nil {
+					return
+				}
+			}
+		}
+		return nil
+	}
+
+	// 2. Directly output to the standard output stream.
+	commonData := &Template{
+		Config: s.cfg,
+		Tables: tables,
+	}
+
+	{
+		// Remove duplicate column names
+		allColumns := make(map[string]*struct{})
+		for _, table := range tables {
+			// all table columns
+			for _, column := range table.Columns {
+				_, ok := allColumns[column.Column]
+				if ok {
+					continue
+				}
+				allColumns[column.Column] = nil
+				commonData.AllTableColumns = append(commonData.AllTableColumns, column.Column)
+			}
 		}
 	}
 
-	content, err = output(ctx, tmp)
+	var contentDefault []byte
+	contentFile := ""
+	switch cmd {
+	case CmdCustom:
+		contentDefault = defaultCustomTemplate
+		contentFile = s.cfg.TemplateFileCustom
+	case CmdModel:
+		contentDefault = defaultModelTemplate
+		contentFile = s.cfg.TemplateFileModel
+	case CmdSchema:
+		contentDefault = defaultSchemaTemplate
+		contentFile = s.cfg.TemplateFileSchema
+	case CmdReplace:
+		contentDefault = defaultReplaceTemplate
+		contentFile = s.cfg.TemplateFileReplace
+	default:
+		err = fmt.Errorf("invalid command: %s", cmd)
+		return
+	}
+	var content []byte
+	content, err = getTemplateFileContent(contentFile, contentDefault)
 	if err != nil {
 		return
 	}
-
+	buf := bytes.NewBuffer(nil)
+	err = s.newTemplateWithFuncMap(cmd, content).Execute(buf, commonData)
+	if err != nil {
+		return
+	}
+	_, err = os.Stdout.Write(buf.Bytes())
+	if err != nil {
+		return
+	}
 	return
 }
 
-func (s *App) newTemplate(name string, content []byte) *template.Template {
+func (s *App) newTemplateWithFuncMap(name string, content []byte) *template.Template {
 	funcMap := template.FuncMap{
 		// Addition
 		"add": func(x, y int) int {
@@ -381,11 +518,14 @@ func (s *App) newTemplate(name string, content []byte) *template.Template {
 			sss := strings.Split(s, ".")
 			return fmt.Sprintf("%s%s%s", c, strings.Join(sss, fmt.Sprintf("%s.%s", c, c)), c)
 		},
+		// table index
+		"tableIndexMapKey": tableIndexMapKey,
+		"tableIndexMapVal": tableIndexMapVal,
 	}
 	return NewTemplate(name, content, funcMap)
 }
 
-func getContent(contentFile string, contentDefault []byte) (content []byte, err error) {
+func getTemplateFileContent(contentFile string, contentDefault []byte) (content []byte, err error) {
 	if contentFile != "" {
 		content, err = os.ReadFile(contentFile)
 		if err != nil {
@@ -396,44 +536,6 @@ func getContent(contentFile string, contentDefault []byte) (content []byte, err 
 	return contentDefault, nil
 }
 
-func (s *App) NewOutput(cmd string) func(ctx context.Context, tmp *Template) (content []byte, err error) {
-	return func(ctx context.Context, tmp *Template) (content []byte, err error) {
-		switch cmd {
-		case CmdCustom:
-			content, err = getContent(s.cfg.TemplateFileCustom, make([]byte, 0))
-			if err != nil {
-				return
-			}
-		case CmdReplace:
-			content, err = getContent(s.cfg.TemplateFileReplace, defaultReplaceTemplate)
-			if err != nil {
-				return
-			}
-		case CmdSchema:
-			content, err = getContent(s.cfg.TemplateFileSchema, defaultSchemaTemplate)
-			if err != nil {
-				return
-			}
-		case CmdTable:
-			content, err = getContent(s.cfg.TemplateFileTable, defaultTableTemplate)
-			if err != nil {
-				return
-			}
-		default:
-			err = fmt.Errorf("invalid command: %s", cmd)
-			return
-		}
-		tt := s.newTemplate(CmdTable, content)
-		buf := bytes.NewBuffer(nil)
-		err = tt.Execute(buf, tmp)
-		if err != nil {
-			return
-		}
-		content = buf.Bytes()
-		return
-	}
-}
-
 type Template struct {
 	Config          *Config
 	Tables          []*Table // All exported tables
@@ -441,16 +543,27 @@ type Template struct {
 }
 
 type Table struct {
-	Database string    `db:"table_schema"`  // database name
-	Table    string    `db:"table_name"`    // table name (original table name)
-	Comment  string    `db:"table_comment"` // table comment
-	Columns  []*Column `db:"-"`             // table columns
-	Defined  string    `db:"-"`             // table DDL
+	Config     *Config            `db:"-"`             // config
+	Database   string             `db:"table_schema"`  // database name
+	Table      string             `db:"table_name"`    // table name (original table name)
+	Comment    string             `db:"table_comment"` // table comment
+	Columns    []*Column          `db:"-"`             // table columns
+	Defined    string             `db:"-"`             // table DDL
+	Indexes    []*Index           `db:"-"`             // table indexes
+	ColumnsMap map[string]*Column `db:"-"`             // table column map
 
 	AutoIncrementColumn string `db:"-"` // auto-increment column
 
 	TableGoTypeName     string `db:"-"` // table go type name struct
 	TableGoTypeSignName string `db:"-"` // table go type name struct with sign
+}
+
+func (s *Table) setColumns(columns []*Column) {
+	s.Columns = columns
+	s.ColumnsMap = make(map[string]*Column, len(s.Columns))
+	for _, v := range s.Columns {
+		s.ColumnsMap[v.Column] = v
+	}
 }
 
 type Column struct {
@@ -526,6 +639,7 @@ func (s *Column) goType() (result string) {
 }
 
 func (s *Column) init(way *hey.Way) {
+	_ = way
 	if s.ColumnCamel != "" {
 		return
 	}
@@ -542,18 +656,126 @@ func (s *Column) init(way *hey.Way) {
 	s.GoTypeBase = strings.ReplaceAll(s.GoType, "*", "")
 }
 
+type Index struct {
+	Name          string   `db:"index_name"`      // index name
+	Column        string   `db:"index_column"`    // Multiple columns use, concatenation.
+	IsPrimaryKey  int      `db:"is_primary_key"`  // Is it a primary key index?
+	IsUniqueKey   int      `db:"is_unique_key"`   // Is it a unique key index?
+	IsOrdinaryKey int      `db:"is_ordinary_key"` // Is it a index key index?
+	IndexType     string   `db:"index_type"`      // btree or others
+	Columns       []string `db:"-"`               // all columns
+	Category      int      `db:"-"`               // 1:primary-key 2:unique-key 3:index key
+	PrimaryKey    bool     `db:"-"`               // primary key bool value
+	UniqueKey     bool     `db:"-"`               // unique key bool value
+	OrdinaryKey   bool     `db:"-"`               // ordinary key bool value
+}
+
+func (s *Index) setColumns() *Index {
+	s.Columns = strings.Split(s.Column, ",")
+	if s.IsPrimaryKey == 1 {
+		s.PrimaryKey = true
+		s.UniqueKey = false
+		s.OrdinaryKey = false
+		s.Category = 1
+	} else {
+		if s.IsUniqueKey == 1 {
+			s.PrimaryKey = false
+			s.UniqueKey = true
+			s.OrdinaryKey = false
+			s.Category = 2
+		} else {
+			s.PrimaryKey = false
+			s.UniqueKey = false
+			s.OrdinaryKey = true
+			s.Category = 3
+		}
+	}
+	return s
+}
+
+func tableIndexMapKey(indexColumn []string, table *Table) string {
+	length := len(indexColumn)
+	key := make([]string, length)
+	for i := 0; i < length; i++ {
+		column := table.ColumnsMap[indexColumn[i]]
+		if column.GoTypeBase == "string" {
+			key[i] = "%s"
+		} else {
+			if strings.Contains(column.GoTypeBase, "int") {
+				key[i] = "%d"
+			} else {
+				key[i] = "%v"
+			}
+		}
+	}
+	return strings.Join(key, "_")
+}
+
+func tableIndexMapVal(indexColumn []string, table *Table, paramName string, asterisk bool) string {
+	length := len(indexColumn)
+	if paramName == "" {
+		paramName = "s"
+	}
+	value := make([]string, length)
+	for i := 0; i < length; i++ {
+		column := table.ColumnsMap[indexColumn[i]]
+		if asterisk && column.GoType != column.GoTypeBase {
+			value[i] = fmt.Sprintf("*%s.%s", paramName, column.ColumnPascal)
+		} else {
+			value[i] = fmt.Sprintf("%s.%s", paramName, column.ColumnPascal)
+		}
+	}
+	return strings.Join(value, ", ")
+}
+
+func tablesQueryIndexes(ctx context.Context, way *hey.Way, tables []*Table, prepare string, args func(table *Table) []any) error {
+	var errorQuery error
+	once := &sync.Once{}
+	waitGroup := &sync.WaitGroup{}
+	query := func(table *Table) error {
+		table.Indexes = make([]*Index, 0)
+		err := way.Query(ctx, hey.NewSQL(prepare, args(table)...), way.RowsScan(&table.Indexes))
+		if err != nil {
+			return err
+		}
+		for _, index := range table.Indexes {
+			index.setColumns()
+		}
+		return nil
+	}
+	for _, table := range tables {
+		waitGroup.Add(1)
+		go func(table *Table) {
+			defer waitGroup.Done()
+			err := query(table)
+			if err != nil {
+				once.Do(func() { errorQuery = err })
+				return
+			}
+		}(table)
+	}
+	waitGroup.Wait()
+	if errorQuery != nil {
+		return errorQuery
+	}
+	return nil
+}
+
 // Schema Parse the structure of tables and columns in the database
 type Schema interface {
-	// QueryTableDefineSql Get the DDL of a specific table in a database
-	QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error)
-
 	// QueryTables Get all tables in a database
 	QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error)
+
+	// QueryTableDefineSql Get the DDL of a specific table in a database
+	QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error)
 
 	// QueryColumns Get all columns of a specific table in a database
 	QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error)
 
-	// QuerySchemas Call QueryColumns and QueryTableDefineSql.
+	// QueryIndexes Get all index of tables
+	QueryIndexes(ctx context.Context, cfg *Config, tables []*Table) error
+
+	// QuerySchemas Call QueryTableDefineSql, QueryColumns and QueryIndexes.
 	QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error
 }
 
@@ -564,6 +786,25 @@ var autoIncrementRegexpReplace = regexp.MustCompile(`(AUTO_INCREMENT|auto_increm
 
 type SchemaMysql struct {
 	way *hey.Way
+}
+
+func (s *SchemaMysql) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
+	tables := make([]*Table, 0)
+	// "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = ? ORDER BY TABLE_NAME ASC;"
+	query := s.way.Table("information_schema.TABLES")
+	query.Select("TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment")
+	query.WhereFunc(func(where hey.Filter) {
+		where.Equal("TABLE_SCHEMA", schema)
+		where.Equal("TABLE_TYPE", "BASE TABLE")
+		if len(cfg.OnlyTable) > 0 {
+			where.In("TABLE_NAME", cfg.OnlyTable)
+		}
+	})
+	query.Asc("TABLE_NAME")
+	if err := query.Scan(ctx, &tables); err != nil {
+		return nil, err
+	}
+	return tables, nil
 }
 
 func (s *SchemaMysql) QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error) {
@@ -591,25 +832,6 @@ func (s *SchemaMysql) QueryTableDefineSql(ctx context.Context, cfg *Config, tabl
 	return defined, nil
 }
 
-func (s *SchemaMysql) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
-	tables := make([]*Table, 0)
-	// "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment FROM information_schema.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = ? ORDER BY TABLE_NAME ASC;"
-	query := s.way.Table("information_schema.TABLES")
-	query.Select("TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_COMMENT AS table_comment")
-	query.WhereFunc(func(where hey.Filter) {
-		where.Equal("TABLE_SCHEMA", schema)
-		where.Equal("TABLE_TYPE", "BASE TABLE")
-		if len(cfg.OnlyTable) > 0 {
-			where.In("TABLE_NAME", cfg.OnlyTable)
-		}
-	})
-	query.Asc("TABLE_NAME")
-	if err := query.Scan(ctx, &tables); err != nil {
-		return nil, err
-	}
-	return tables, nil
-}
-
 func (s *SchemaMysql) QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error) {
 	columns := make([]*Column, 0)
 	if schema == "" || table == "" {
@@ -621,6 +843,33 @@ func (s *SchemaMysql) QueryColumns(ctx context.Context, cfg *Config, schema stri
 		return nil, err
 	}
 	return columns, nil
+}
+
+func (s *SchemaMysql) QueryIndexes(ctx context.Context, cfg *Config, tables []*Table) error {
+	prepare := `
+SELECT
+    i.relname AS index_name,
+    STRING_AGG(a.attname, ',' ORDER BY 
+        array_position(ix.indkey, a.attnum::smallint)
+    ) AS index_column,
+    CASE WHEN ix.indisprimary THEN 1 ELSE 0 END AS is_primary_key,
+    CASE WHEN ix.indisunique THEN 1 ELSE 0 END AS is_unique_key,
+    CASE WHEN NOT ix.indisprimary AND NOT ix.indisunique THEN 1 ELSE 0 END AS is_ordinary_key,
+    am.amname AS index_type
+FROM pg_class t
+JOIN pg_index ix ON t.oid = ix.indrelid
+JOIN pg_class i ON i.oid = ix.indexrelid
+JOIN pg_am am ON i.relam = am.oid
+JOIN pg_attribute a ON a.attrelid = t.oid 
+    AND a.attnum = ANY(ix.indkey)
+WHERE t.relname = ?
+AND t.relkind = 'r'
+GROUP BY i.relname, ix.indisprimary, ix.indisunique, am.amname
+ORDER BY is_primary_key DESC, is_unique_key DESC, i.relname;
+`
+	return tablesQueryIndexes(ctx, s.way, tables, prepare, func(t *Table) []any {
+		return []any{t.Table}
+	})
 }
 
 func (s *SchemaMysql) QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error {
@@ -636,7 +885,7 @@ func (s *SchemaMysql) QuerySchemas(ctx context.Context, cfg *Config, tables []*T
 				once.Do(func() { errorQuery = err })
 				return
 			}
-			table.Columns = columns
+			table.setColumns(columns)
 			defined, err := s.QueryTableDefineSql(ctx, cfg, table)
 			if err != nil {
 				once.Do(func() { errorQuery = err })
@@ -648,6 +897,11 @@ func (s *SchemaMysql) QuerySchemas(ctx context.Context, cfg *Config, tables []*T
 	waitGroup.Wait()
 	if errorQuery != nil {
 		return errorQuery
+	}
+	initAllTablesAllColumns(cfg, s.way, tables)
+	err := s.QueryIndexes(ctx, cfg, tables)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -665,6 +919,25 @@ var pgsqlSeq = regexp.MustCompile(`^nextval\('([A-Za-z0-9_]+)'::regclass\)$`)
 
 type SchemaPostgresql struct {
 	way *hey.Way
+}
+
+func (s *SchemaPostgresql) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
+	tables := make([]*Table, 0)
+	// SELECT table_schema, table_name FROM information_schema.tables WHERE ( table_schema = ? AND table_type = 'BASE TABLE' ) ORDER BY table_name ASC
+	query := s.way.Table("information_schema.tables")
+	query.Select("table_schema, table_name")
+	query.WhereFunc(func(where hey.Filter) {
+		where.Equal("table_schema", schema)
+		where.Equal("table_type", "BASE TABLE")
+		if len(cfg.OnlyTable) > 0 {
+			where.In("table_name", cfg.OnlyTable)
+		}
+	})
+	query.Asc("table_name")
+	if err := query.Scan(ctx, &tables); err != nil {
+		return nil, err
+	}
+	return tables, nil
 }
 
 func (s *SchemaPostgresql) QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error) {
@@ -725,25 +998,6 @@ func (s *SchemaPostgresql) queryTableComment(ctx context.Context, cfg *Config, t
 	return table.Comment, nil
 }
 
-func (s *SchemaPostgresql) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
-	tables := make([]*Table, 0)
-	// SELECT table_schema, table_name FROM information_schema.tables WHERE ( table_schema = ? AND table_type = 'BASE TABLE' ) ORDER BY table_name ASC
-	query := s.way.Table("information_schema.tables")
-	query.Select("table_schema, table_name")
-	query.WhereFunc(func(where hey.Filter) {
-		where.Equal("table_schema", schema)
-		where.Equal("table_type", "BASE TABLE")
-		if len(cfg.OnlyTable) > 0 {
-			where.In("table_name", cfg.OnlyTable)
-		}
-	})
-	query.Asc("table_name")
-	if err := query.Scan(ctx, &tables); err != nil {
-		return nil, err
-	}
-	return tables, nil
-}
-
 func (s *SchemaPostgresql) QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error) {
 	columns := make([]*Column, 0)
 	if schema == "" || table == "" {
@@ -801,6 +1055,33 @@ func (s *SchemaPostgresql) QueryColumns(ctx context.Context, cfg *Config, schema
 	return columns, nil
 }
 
+func (s *SchemaPostgresql) QueryIndexes(ctx context.Context, cfg *Config, tables []*Table) error {
+	prepare := `
+SELECT
+    i.relname AS index_name,
+    STRING_AGG(a.attname, ',' ORDER BY 
+        array_position(ix.indkey, a.attnum::smallint)
+    ) AS index_column,
+    CASE WHEN ix.indisprimary THEN 1 ELSE 0 END AS is_primary_key,
+    CASE WHEN ix.indisunique THEN 1 ELSE 0 END AS is_unique_key,
+    CASE WHEN NOT ix.indisprimary AND NOT ix.indisunique THEN 1 ELSE 0 END AS is_ordinary_key,
+    am.amname AS index_type
+FROM pg_class t
+JOIN pg_index ix ON t.oid = ix.indrelid
+JOIN pg_class i ON i.oid = ix.indexrelid
+JOIN pg_am am ON i.relam = am.oid
+JOIN pg_attribute a ON a.attrelid = t.oid 
+    AND a.attnum = ANY(ix.indkey)
+WHERE t.relname = ?
+AND t.relkind = 'r'
+GROUP BY i.relname, ix.indisprimary, ix.indisunique, am.amname
+ORDER BY is_primary_key DESC, is_unique_key DESC, i.relname;
+`
+	return tablesQueryIndexes(ctx, s.way, tables, prepare, func(t *Table) []any {
+		return []any{t.Table}
+	})
+}
+
 func (s *SchemaPostgresql) QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error {
 	var errorQuery error
 	once := &sync.Once{}
@@ -814,7 +1095,7 @@ func (s *SchemaPostgresql) QuerySchemas(ctx context.Context, cfg *Config, tables
 				once.Do(func() { errorQuery = err })
 				return
 			}
-			table.Columns = columns
+			table.setColumns(columns)
 			if table.Comment, err = s.queryTableComment(ctx, cfg, table); err != nil {
 				once.Do(func() { errorQuery = err })
 			}
@@ -828,6 +1109,11 @@ func (s *SchemaPostgresql) QuerySchemas(ctx context.Context, cfg *Config, tables
 	if errorQuery != nil {
 		return errorQuery
 	}
+	initAllTablesAllColumns(cfg, s.way, tables)
+	err := s.QueryIndexes(ctx, cfg, tables)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -839,10 +1125,6 @@ func NewSchemaPostgresql(way *hey.Way) *SchemaPostgresql {
 
 type SchemaSqlite struct {
 	way *hey.Way
-}
-
-func (s *SchemaSqlite) QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error) {
-	return table.Defined, nil
 }
 
 func (s *SchemaSqlite) QueryTables(ctx context.Context, cfg *Config, schema string) ([]*Table, error) {
@@ -875,6 +1157,10 @@ func (s *SchemaSqlite) QueryTables(ctx context.Context, cfg *Config, schema stri
 		return nil, err
 	}
 	return tables, nil
+}
+
+func (s *SchemaSqlite) QueryTableDefineSql(ctx context.Context, cfg *Config, table *Table) (string, error) {
+	return table.Defined, nil
 }
 
 func (s *SchemaSqlite) QueryColumns(ctx context.Context, cfg *Config, schema string, table string) ([]*Column, error) {
@@ -932,6 +1218,56 @@ func (s *SchemaSqlite) QueryColumns(ctx context.Context, cfg *Config, schema str
 	return columns, nil
 }
 
+func (s *SchemaSqlite) QueryIndexes(ctx context.Context, cfg *Config, tables []*Table) error {
+	prepare := `
+SELECT 
+    idx_name AS index_name,
+    group_concat(col_name, ',') AS index_column,
+	is_primary_key,
+    is_unique_key,
+    CASE 
+        WHEN is_primary_key = 0 AND is_unique_key = 0 THEN 1 
+        ELSE 0 
+    END AS is_ordinary_key,
+    idx_type AS index_type
+FROM (
+    -- ordinary index
+    SELECT 
+        m.name AS idx_name,
+        ii.name AS col_name,
+        ii.seqno AS col_order,
+        0 AS is_primary_key,
+        CASE WHEN m.sql LIKE '%UNIQUE%' THEN 1 ELSE 0 END AS is_unique_key,
+        CASE 
+            WHEN m.sql LIKE '%UNIQUE%' THEN 'UNIQUE INDEX'
+            ELSE 'INDEX'
+        END AS idx_type
+    FROM sqlite_master m
+    CROSS JOIN pragma_index_info(m.name) ii
+    WHERE m.type = 'index' 
+    AND m.tbl_name = ?
+    
+    UNION ALL
+    
+    -- primary key index
+    SELECT 
+        'PRIMARY' AS idx_name,
+        ti.name AS col_name,
+        ti.pk AS col_order,
+        1 AS is_primary_key,
+        0 AS is_unique_key,
+        'PRIMARY KEY' AS idx_type
+    FROM pragma_table_info(?) ti
+    WHERE ti.pk > 0
+) t
+GROUP BY idx_name, is_primary_key, is_unique_key, idx_type
+ORDER BY is_primary_key DESC, is_unique_key DESC, idx_name;
+`
+	return tablesQueryIndexes(ctx, s.way, tables, prepare, func(t *Table) []any {
+		return []any{t.Table, t.Table}
+	})
+}
+
 func (s *SchemaSqlite) QuerySchemas(ctx context.Context, cfg *Config, tables []*Table) error {
 	for _, table := range tables {
 		columns, err := s.QueryColumns(ctx, cfg, table.Database, table.Table)
@@ -943,7 +1279,12 @@ func (s *SchemaSqlite) QuerySchemas(ctx context.Context, cfg *Config, tables []*
 				table.AutoIncrementColumn = column.Column
 			}
 		}
-		table.Columns = columns
+		table.setColumns(columns)
+	}
+	initAllTablesAllColumns(cfg, s.way, tables)
+	err := s.QueryIndexes(ctx, cfg, tables)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -971,45 +1312,7 @@ func removeNewlineCharacter(s string) string {
 	return s
 }
 
-// GetAllTables Get all tables and their columns that meet the criteria
-func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.Way) ([]*Table, error) {
-	databaseName := config.Database.Database
-	switch way.Config().Manual.DatabaseType {
-	case cst.Postgresql:
-		databaseName = config.Database.DatabaseSchemaName
-	case cst.Sqlite:
-		databaseName = ""
-	}
-
-	lists, err := schema.QueryTables(ctx, config, databaseName)
-	if err != nil {
-		return nil, err
-	}
-
-	onlyTableMap := make(map[string]*struct{})
-	for _, t := range config.OnlyTable {
-		onlyTableMap[t] = nil
-	}
-	onlyTable := len(onlyTableMap) > 0
-
-	tables := make([]*Table, 0, len(lists))
-	for _, t := range lists {
-		if onlyTable {
-			if _, ok := onlyTableMap[t.Table]; ok {
-				tables = append(tables, t)
-			}
-			continue
-		}
-		if isTableDisabled(config, t.Table) {
-			continue
-		}
-		tables = append(tables, t)
-	}
-	err = schema.QuerySchemas(ctx, config, tables)
-	if err != nil {
-		return nil, err
-	}
-
+func initAllTablesAllColumns(config *Config, way *hey.Way, tables []*Table) {
 	timestamp := time.Now().Unix()
 	for _, t := range tables {
 		if t.Comment == "" {
@@ -1038,13 +1341,13 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 		}
 		// Method table column
 		{
-			if config.MethodTableColumn == nil {
-				config.MethodTableColumn = make(map[string]*MethodTableColumn)
+			if config.OutputSchemaTableColumnMethods == nil {
+				config.OutputSchemaTableColumnMethods = make(map[string]*SchemaTableColumnMethods)
 			}
-			value, ok := config.MethodTableColumn[t.Table]
+			value, ok := config.OutputSchemaTableColumnMethods[t.Table]
 			if !ok {
-				value = &MethodTableColumn{}
-				config.MethodTableColumn[t.Table] = value
+				value = &SchemaTableColumnMethods{}
+				config.OutputSchemaTableColumnMethods[t.Table] = value
 			}
 			if t.AutoIncrementColumn != "" {
 				assoc := make(map[string]*struct{})
@@ -1060,6 +1363,46 @@ func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.W
 			}
 		}
 	}
+}
 
+// GetAllTables Get all tables and their columns that meet the criteria
+func GetAllTables(ctx context.Context, config *Config, schema Schema, way *hey.Way) ([]*Table, error) {
+	databaseName := config.Database.Database
+	switch way.Config().Manual.DatabaseType {
+	case cst.Postgresql:
+		databaseName = config.Database.DatabaseSchemaName
+	case cst.Sqlite:
+		databaseName = ""
+	}
+
+	lists, err := schema.QueryTables(ctx, config, databaseName)
+	if err != nil {
+		return nil, err
+	}
+
+	onlyTableMap := make(map[string]*struct{})
+	for _, t := range config.OnlyTable {
+		onlyTableMap[t] = nil
+	}
+	onlyTable := len(onlyTableMap) > 0
+
+	tables := make([]*Table, 0, len(lists))
+	for _, t := range lists {
+		t.Config = config
+		if onlyTable {
+			if _, ok := onlyTableMap[t.Table]; ok {
+				tables = append(tables, t)
+			}
+			continue
+		}
+		if isTableDisabled(config, t.Table) {
+			continue
+		}
+		tables = append(tables, t)
+	}
+	err = schema.QuerySchemas(ctx, config, tables)
+	if err != nil {
+		return nil, err
+	}
 	return tables, nil
 }

@@ -23,7 +23,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 var (
@@ -847,25 +847,18 @@ func (s *SchemaMysql) QueryColumns(ctx context.Context, cfg *Config, schema stri
 
 func (s *SchemaMysql) QueryIndexes(ctx context.Context, cfg *Config, tables []*Table) error {
 	prepare := `
-SELECT
-    i.relname AS index_name,
-    STRING_AGG(a.attname, ',' ORDER BY 
-        array_position(ix.indkey, a.attnum::smallint)
-    ) AS index_column,
-    CASE WHEN ix.indisprimary THEN 1 ELSE 0 END AS is_primary_key,
-    CASE WHEN ix.indisunique THEN 1 ELSE 0 END AS is_unique_key,
-    CASE WHEN NOT ix.indisprimary AND NOT ix.indisunique THEN 1 ELSE 0 END AS is_ordinary_key,
-    am.amname AS index_type
-FROM pg_class t
-JOIN pg_index ix ON t.oid = ix.indrelid
-JOIN pg_class i ON i.oid = ix.indexrelid
-JOIN pg_am am ON i.relam = am.oid
-JOIN pg_attribute a ON a.attrelid = t.oid 
-    AND a.attnum = ANY(ix.indkey)
-WHERE t.relname = ?
-AND t.relkind = 'r'
-GROUP BY i.relname, ix.indisprimary, ix.indisunique, am.amname
-ORDER BY is_primary_key DESC, is_unique_key DESC, i.relname;
+SELECT 
+    INDEX_NAME AS index_name,
+    GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS index_column,
+    CASE WHEN INDEX_NAME = 'PRIMARY' THEN 1 ELSE 0 END AS is_primary_key,
+    CASE WHEN NON_UNIQUE = 0 THEN 1 ELSE 0 END AS is_unique_key,
+    CASE WHEN INDEX_NAME != 'PRIMARY' AND NON_UNIQUE = 1 THEN 1 ELSE 0 END AS is_ordinary_key,
+    MAX(INDEX_TYPE) AS index_type
+FROM INFORMATION_SCHEMA.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE()
+AND TABLE_NAME = ?
+GROUP BY INDEX_NAME, NON_UNIQUE
+ORDER BY is_primary_key DESC, is_unique_key DESC, index_name;
 `
 	return tablesQueryIndexes(ctx, s.way, tables, prepare, func(t *Table) []any {
 		return []any{t.Table}

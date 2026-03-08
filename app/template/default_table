@@ -24,8 +24,7 @@ func (s *{{$.TableGoTypeSignName}}) hasNilValue(values []*{{$packageTable}}.{{$.
 	return false
 }
 
-func (s *{{$.TableGoTypeSignName}}) hasDuplicate(values []*{{$packageTable}}.{{$.TableGoTypeName}}) bool {
-	length := len(values){{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}} {{continue}} {{end}}
+func (s *{{$.TableGoTypeSignName}}) hasDuplicate(values []*{{$packageTable}}.{{$.TableGoTypeName}}) bool { {{$first := false}}{{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}} {{continue}} {{end}}{{if not $first}}{{print "\n\t"}}length := len(values){{$first = true}}{{end}}
 	{
 		// {{$index.Column}}
 		exists := make(map[string]*struct{}, length)
@@ -40,12 +39,12 @@ func (s *{{$.TableGoTypeSignName}}) hasDuplicate(values []*{{$packageTable}}.{{$
 	return false
 }
 
-func (s *{{$.TableGoTypeSignName}}) adminSelectHasInsert(ctx context.Context, way *hey.Way, lists []*{{$packageTable}}.{{$.TableGoTypeName}}) (bool, error) { {{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}}{{continue}}{{end}}
+func (s *{{$.TableGoTypeSignName}}) adminSelectHasInsert(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.{{$.TableGoTypeName}}) (bool, error) { {{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}}{{continue}}{{end}}
 	{
 		has, err := s.SelectHas(ctx, way, func(table *hey.Table) {
 			table.Select(s.{{$autoIncrementColumnPascal}})
 			table.WhereFunc(func(f hey.Filter) {
-				{{if eq (len $index.Columns) 1}}f.In({{tableIndexMapVal $index.Columns $table "s" false}}, hey.SliceToSlice(lists, func(k int, v *{{$packageTable}}.{{$.TableGoTypeName}}) any { return {{tableIndexMapVal $index.Columns $table "v" true}} })){{else}}f.InGroup([]string{ {{tableIndexMapVal $index.Columns $table "s" false}} }, hey.SliceToSlice(lists, func(k int, v *{{$packageTable}}.{{$.TableGoTypeName}}) any { return []any{ {{tableIndexMapVal $index.Columns $table "v" true}} } })){{end}}
+				{{if eq (len $index.Columns) 1}}f.In({{tableIndexMapVal $index.Columns $table "s" false}}, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.{{$.TableGoTypeName}}) any { return {{tableIndexMapVal $index.Columns $table "v" true}} })){{else}}f.InGroup([]string{ {{tableIndexMapVal $index.Columns $table "s" false}} }, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.{{$.TableGoTypeName}}) any { return []any{ {{tableIndexMapVal $index.Columns $table "v" true}} } })){{end}}
 			})
 		})
 		if err != nil {

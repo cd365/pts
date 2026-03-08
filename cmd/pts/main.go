@@ -122,6 +122,25 @@ func main() {
 		rootCmd.AddCommand(cmd)
 	}
 
+	{
+		cmd := &cobra.Command{
+			Use:   "git",
+			Short: "View git commit id",
+			RunE: func(cmd *cobra.Command, args []string) error {
+				_, err := os.Stdout.WriteString(app.GitCommitId)
+				if err != nil {
+					return err
+				}
+				_, err = os.Stdout.WriteString("\n")
+				if err != nil {
+					return err
+				}
+				return nil
+			},
+		}
+		rootCmd.AddCommand(cmd)
+	}
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println("Error:", err.Error())
 	}

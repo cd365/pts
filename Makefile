@@ -4,7 +4,7 @@
 PROGRAM := pts
 
 # Dynamic variable
-GIT_COMMIT_ID := $(git log --pretty=oneline -n 1 | awk '{print $1}')
+GIT_COMMIT_ID := $(shell git log --pretty=oneline -n 1 | awk "{print \$$1}")
 
 # Output directory
 OUTPUT_DIR := .
@@ -26,8 +26,6 @@ mod-tidy:
 
 build:
 	@$(BUILD_CMD)
-	@file $(OUTPUT) || true
-	@echo "build success"
 
 upx:
 	@upx -9 ${PROGRAM}

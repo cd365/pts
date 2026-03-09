@@ -1,0 +1,62 @@
+{{/* schema interface */}}
+
+type Interface interface {
+	Table() string
+    Column() []string
+    ColumnType() map[string]string
+    ColumnValueMatch(data map[string]any) map[string]any
+    Insert(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) (int64, error)
+    InsertSimple(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) error
+    Delete(ctx context.Context, way *hey.Way, where func(w hey.Filter)) (int64, error)
+    DeleteSimple(ctx context.Context, way *hey.Way, where func(w hey.Filter)) error
+    Update(ctx context.Context, way *hey.Way, update func(w hey.Filter, u hey.SQLUpdateSet)) (int64, error)
+    UpdateSimple(ctx context.Context, way *hey.Way, update func(w hey.Filter, u hey.SQLUpdateSet)) error
+    Upsert(ctx context.Context, way *hey.Way, upsert func(w hey.Filter, u hey.SQLUpdateSet, i hey.SQLInsert)) (mod int64, add int64, err error)
+    UpsertSimple(ctx context.Context, way *hey.Way, upsert func(w hey.Filter, u hey.SQLUpdateSet, i hey.SQLInsert)) error
+    DeleteInsert(ctx context.Context, way *hey.Way, where func(w hey.Filter), insert func(i hey.SQLInsert)) error
+}
+
+type InterfaceAdmin interface {
+	Interface
+	AdminInsert(ctx context.Context, way *hey.Way, data []byte) error
+	AdminRemove(ctx context.Context, way *hey.Way, data []byte) error
+	AdminDelete(ctx context.Context, way *hey.Way, data []byte) error
+	AdminUpdate(ctx context.Context, way *hey.Way, data []byte) error
+	AdminUpsert(ctx context.Context, way *hey.Way, data []byte) error
+	AdminUpsertOne(ctx context.Context, way *hey.Way, data []byte) error
+}
+
+var mapTable = map[string]Interface{ {{range $i, $t := .Tables}}{{print "\n\t"}}"{{$t.TableName}}": {{$t.TableGoTypeName}},{{end}}
+}
+
+/* common structures for querying data */
+
+type SelectLimitOffset struct {
+	Limit  *int64 `json:"limit" query:"limit" form:"limit" validate:"omitempty,min=1,max=5000"`      // page size [1,5000]
+    Offset *int64 `json:"offset" query:"offset" form:"offset" validate:"omitempty,min=0,max=100000"` // offset value [0,100000]
+    Page   *int64 `json:"page" query:"page" form:"page" validate:"omitempty,min=1"`                  // page value [1,+∞)
+}
+
+func (s SelectLimitOffset) GetLimit() int64 {
+	if s.Limit == nil {
+		return 1
+	}
+	return *s.Limit
+}
+
+func (s SelectLimitOffset) GetPage() int64 {
+	if s.Page == nil {
+		return 1
+	}
+	return *s.Page
+}
+
+func (s SelectLimitOffset) GetOffset() int64 {
+	if s.Page != nil {
+		return (*s.Page - 1) * s.GetLimit()
+	}
+	if s.Offset != nil && *s.Offset >= 0 {
+		return *s.Offset
+	}
+	return 0
+}

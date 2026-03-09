@@ -561,6 +561,8 @@ type Table struct {
 
 	AutoIncrementColumn string `db:"-"` // auto-increment column
 
+	TablePrefix         string `db:"-"` // table name prefix value
+	TableName           string `db:"-"` // table name, without prefix
 	TableGoTypeName     string `db:"-"` // table go type name struct
 	TableGoTypeSignName string `db:"-"` // table go type name struct with sign
 }
@@ -1323,11 +1325,14 @@ func initAllTablesAllColumns(config *Config, way *hey.Way, tables []*Table) {
 		// Handle naming
 		{
 			if t.TableGoTypeName == "" {
-				name := t.Table
-				if config.Database.TablePrefix != "" {
-					name = strings.TrimPrefix(name, config.Database.TablePrefix)
+				t.TableName = t.Table
+				if prefix := config.Database.TablePrefix; prefix != "" {
+					if strings.HasPrefix(t.TableName, prefix) {
+						t.TablePrefix = prefix
+						t.TableName = strings.TrimPrefix(t.TableName, config.Database.TablePrefix)
+					}
 				}
-				t.TableGoTypeName = Pascal(name)
+				t.TableGoTypeName = Pascal(t.TableName)
 				sign := strings.ReplaceAll(config.Sign, " ", "")
 				if sign == "" {
 					sign = fmt.Sprintf("%d", timestamp)

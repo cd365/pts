@@ -521,6 +521,13 @@ func (s *App) newTemplateWithFuncMap(name string, content []byte) *template.Temp
 		// table index
 		"tableIndexMapKey": tableIndexMapKey,
 		"tableIndexMapVal": tableIndexMapVal,
+		// prefix + string
+		"prefixString": func(prefix string, s string) string {
+			if strings.HasPrefix(s, prefix) {
+				return s
+			}
+			return fmt.Sprintf("%s%s", prefix, s)
+		},
 	}
 	return NewTemplate(name, content, funcMap)
 }

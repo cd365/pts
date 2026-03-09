@@ -670,7 +670,7 @@ type Index struct {
 	Column        string   `db:"index_column"`    // Multiple columns use, concatenation.
 	IsPrimaryKey  int      `db:"is_primary_key"`  // Is it a primary key index?
 	IsUniqueKey   int      `db:"is_unique_key"`   // Is it a unique key index?
-	IsOrdinaryKey int      `db:"is_ordinary_key"` // Is it a index key index?
+	IsOrdinaryKey int      `db:"is_ordinary_key"` // Is it an ordinary key index?
 	IndexType     string   `db:"index_type"`      // btree or others
 	Columns       []string `db:"-"`               // all columns
 	Category      int      `db:"-"`               // 1:primary-key 2:unique-key 3:index key

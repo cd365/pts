@@ -13,7 +13,8 @@ var (
 )
 
 var (
-	defaultCustomTemplate = make([]byte, 0)
+	//go:embed template/default_custom
+	defaultCustomTemplate []byte
 
 	//go:embed template/default_model
 	defaultModelTemplate []byte

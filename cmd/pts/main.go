@@ -118,6 +118,7 @@ func main() {
 		}
 		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_TABLE_CONFIG")
 		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
+		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
 		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
 		rootCmd.AddCommand(cmd)
 	}
@@ -210,7 +211,7 @@ func start(cmd *cobra.Command, args []string, command string) error {
 		value := ""
 		value, err = cmd.Flags().GetString(flagTemplateFile)
 		if err == nil {
-			if _, err = os.Stat(value); err == nil {
+			if app.FileExist(value) {
 				switch command {
 				case app.CmdCustom:
 					cli.Cfg().TemplateFileCustom = value
@@ -220,6 +221,8 @@ func start(cmd *cobra.Command, args []string, command string) error {
 					cli.Cfg().TemplateFileSchema = value
 				case app.CmdReplace:
 					cli.Cfg().TemplateFileReplace = value
+				case app.CmdTable:
+					cli.Cfg().TemplateFileTable = value
 				}
 			}
 		}

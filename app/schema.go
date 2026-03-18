@@ -91,6 +91,7 @@ type Config struct {
 	TemplateFileModel   string           `yaml:"template_file_model"`
 	TemplateFileSchema  string           `yaml:"template_file_schema"`
 	TemplateFileReplace string           `yaml:"template_file_replace"`
+	TemplateFileTable   string           `yaml:"template_file_table"`
 	TemplateTable       []*TemplateTable `yaml:"template_table"`
 
 	// Only export the following tables
@@ -404,9 +405,19 @@ func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
 		if length == 0 {
 			return
 		}
+
+		templateFileTable := s.cfg.TemplateFileTable
+		if !FileExist(templateFileTable) {
+			templateFileTable = ""
+		}
+
 		var content []byte
 		for index, config := range configs {
-			content, err = getTemplateFileContent(config.TemplateFile, defaultTableTemplate)
+			tableTemplateFile := config.TemplateFile
+			if !FileExist(tableTemplateFile) {
+				tableTemplateFile = templateFileTable
+			}
+			content, err = getTemplateFileContent(tableTemplateFile, defaultTableTemplate)
 			if err != nil {
 				return
 			}
@@ -541,6 +552,17 @@ func getTemplateFileContent(contentFile string, contentDefault []byte) (content 
 		return content, nil
 	}
 	return contentDefault, nil
+}
+
+func FileExist(filePath string) bool {
+	stat, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+	if stat.IsDir() {
+		return false
+	}
+	return true
 }
 
 type Template struct {

@@ -37,10 +37,11 @@ sign: 01
 model_package: model
 
 # Custom template configuration.
-template_file_custom: replace this with a `custom` template path
-template_file_replace: replace this with a `replace` template path
-template_file_schema: replace this with a `schema` template path
-template_file_model: replace this with a `model` template path
+template_file_custom: replace this with a template file path
+template_file_model: replace this with a template file path
+template_file_schema: replace this with a template file path
+template_file_replace: replace this with a template file path
+template_file_table: replace this with a template file path
 template_table:
     - template_file:
       output_file_directory:

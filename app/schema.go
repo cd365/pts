@@ -18,6 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cd365/hey/v7/cst"
+	"github.com/spf13/cobra"
 
 	"github.com/cd365/hey/v7"
 
@@ -356,8 +357,8 @@ func (s *App) Cfg() *Config {
 	return s.cfg
 }
 
-func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
-	if cmd == "" {
+func (s *App) Run(ctx context.Context, cmd *cobra.Command, command string, args []string) (err error) {
+	if command == "" {
 		return
 	}
 
@@ -399,11 +400,34 @@ func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
 	}
 
 	// 1. Write directly to the file.
-	if cmd == CmdTable {
+	if command == CmdTable {
 		configs := s.cfg.TemplateTable
 		length := len(configs)
 		if length == 0 {
 			return
+		}
+
+		outputDirectoryAbsolute := ""
+		{
+			outputDirectory := ""
+			outputDirectory, err = cmd.Flags().GetString("output-directory")
+			if err != nil {
+				return
+			}
+			outputDirectory = strings.TrimSpace(outputDirectory)
+			if outputDirectory != "" {
+				outputDirectoryAbsolute, err = filepath.Abs(outputDirectory)
+				if err != nil {
+					return
+				}
+			}
+		}
+		writeDirectory := func(cfg *TemplateTable) string {
+			output := cfg.OutputFileDirectory
+			if !filepath.IsAbs(output) {
+				output = filepath.Join(outputDirectoryAbsolute, output)
+			}
+			return output
 		}
 
 		templateFileTable := s.cfg.TemplateFileTable
@@ -431,7 +455,7 @@ func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
 			}
 			for _, table := range tables {
 				buf := bytes.NewBuffer(nil)
-				templateName := fmt.Sprintf("%s_%d", cmd, index)
+				templateName := fmt.Sprintf("%s_%d", command, index)
 				err = s.newTemplateWithFuncMap(templateName, content).Execute(buf, table)
 				if err != nil {
 					return
@@ -441,7 +465,7 @@ func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
 				b.WriteString(goPackageName)
 				b.WriteString("\n\n")
 				b.Write(buf.Bytes())
-				filename := filepath.Join(config.OutputFileDirectory, fmt.Sprintf("%s%s.go", table.Table, suffix))
+				filename := filepath.Join(writeDirectory(config), fmt.Sprintf("%s%s.go", table.Table, suffix))
 				err = WriteFileIfNotExists(filename, b)
 				if err != nil {
 					return
@@ -475,7 +499,7 @@ func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
 
 	var contentDefault []byte
 	contentFile := ""
-	switch cmd {
+	switch command {
 	case CmdCustom:
 		contentDefault = defaultCustomTemplate
 		contentFile = s.cfg.TemplateFileCustom
@@ -489,7 +513,7 @@ func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
 		contentDefault = defaultReplaceTemplate
 		contentFile = s.cfg.TemplateFileReplace
 	default:
-		err = fmt.Errorf("invalid command: %s", cmd)
+		err = fmt.Errorf("invalid command: %s", command)
 		return
 	}
 	var content []byte
@@ -498,7 +522,7 @@ func (s *App) Run(ctx context.Context, cmd string, args []string) (err error) {
 		return
 	}
 	buf := bytes.NewBuffer(nil)
-	err = s.newTemplateWithFuncMap(cmd, content).Execute(buf, commonData)
+	err = s.newTemplateWithFuncMap(command, content).Execute(buf, commonData)
 	if err != nil {
 		return
 	}

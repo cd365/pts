@@ -19,9 +19,9 @@ const (
 	flagTemplateFile    = "template_file"
 	flagTemplateDefault = "template_default"
 
-	flagTableUsage           = "Only table lists, multiple uses ',' concatenation. Example: table1,table2,table3..."
-	flagTemplateFileUsage    = "Use a custom template file"
-	flagTemplateDefaultUsage = "Output default template content"
+	flagTableUsage           = "only table lists, multiple uses ',' concatenation. Example: table1,table2,table3..."
+	flagTemplateFileUsage    = "use a custom template file"
+	flagTemplateDefaultUsage = "output default template content"
 )
 
 var rootCmd = &cobra.Command{
@@ -52,7 +52,7 @@ func main() {
 				return start(cmd, args, app.CmdCustom)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_CUSTOM_CONFIG")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "configuration file, ENV: PTS_CUSTOM_CONFIG")
 		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
 		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
 		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
@@ -68,7 +68,7 @@ func main() {
 				return start(cmd, args, app.CmdModel)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_MODEL_CONFIG")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "configuration file, ENV: PTS_MODEL_CONFIG")
 		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
 		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
 		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
@@ -84,7 +84,7 @@ func main() {
 				return start(cmd, args, app.CmdSchema)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_SCHEMA_CONFIG")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "configuration file, ENV: PTS_SCHEMA_CONFIG")
 		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
 		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
 		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
@@ -100,7 +100,7 @@ func main() {
 				return start(cmd, args, app.CmdReplace)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_REPLACE_CONFIG")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "configuration file, ENV: PTS_REPLACE_CONFIG")
 		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
 		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
 		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
@@ -116,10 +116,11 @@ func main() {
 				return start(cmd, args, app.CmdTable)
 			},
 		}
-		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "Configuration file, ENV: PTS_TABLE_CONFIG")
+		cmd.Flags().StringP(flagConfigure, "c", "example.yaml", "configuration file, ENV: PTS_TABLE_CONFIG")
 		cmd.Flags().StringP(flagTable, "t", "", flagTableUsage)
 		cmd.Flags().StringP(flagTemplateFile, "u", "", flagTemplateFileUsage)
 		cmd.Flags().BoolP(flagTemplateDefault, "a", false, flagTemplateDefaultUsage)
+		cmd.Flags().StringP("output-directory", "o", "", "file output directory")
 		rootCmd.AddCommand(cmd)
 	}
 
@@ -231,7 +232,7 @@ func start(cmd *cobra.Command, args []string, command string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*30)
 	defer cancel()
 
-	err = cli.Run(ctx, command, args)
+	err = cli.Run(ctx, cmd, command, args)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-# Database configuration
+# Database configuration.
 database:
     driver: postgres
     username: postgres
@@ -42,11 +42,6 @@ template_file_model: replace this with a template file path
 template_file_schema: replace this with a template file path
 template_file_replace: replace this with a template file path
 template_file_table: replace this with a template file path
-template_table:
-    - template_file:
-      output_file_directory:
-      output_file_name_suffix: _admin
-      output_go_file_package_name: schema
 
 # Schema output configuration.
 output_schema_methods: true
@@ -55,3 +50,10 @@ output_schema_table_column_methods:
         select:
             - email
             - username
+
+# Table output configuration.
+template_table:
+    - template_file:
+      output_file_directory:
+      output_file_name_suffix: _admin
+      output_go_file_package_name: schema

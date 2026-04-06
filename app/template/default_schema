@@ -69,12 +69,33 @@ func (s *{{$t.TableGoTypeSignName}}) ColumnValueMatch(data map[string]any) map[s
 	return result
 }
 
+func (s *{{$t.TableGoTypeSignName}}) ColumnInsertIgnore() ([]string) {
+	return []string{ {{range $i, $v := $t.Except.Insert}}"{{$v}}"{{if lt $i (sub (len $t.Except.Insert) 1)}}, {{end}}{{end}} }
+}
+
+func (s *{{$t.TableGoTypeSignName}}) ColumnInsertIgnoreMap() (map[string]*struct{}) {
+	return map[string]*struct{}{
+{{range $i, $v := $t.Except.Insert}}{{print "\t\t"}}"{{$v}}": nil,{{if lt (add $i 1) (len $t.Except.Insert)}}{{print "\n"}}{{end}}{{end}}
+	}
+}
+
+func (s *{{$t.TableGoTypeSignName}}) ColumnUpdateIgnore() ([]string) {
+	return []string{ {{range $i, $v := $t.Except.Update}}"{{$v}}"{{if lt $i (sub (len $t.Except.Update) 1)}}, {{end}}{{end}} }
+}
+
+func (s *{{$t.TableGoTypeSignName}}) ColumnUpdateIgnoreMap() (map[string]*struct{}) {
+    return map[string]*struct{}{
+{{range $i, $v := $t.Except.Update}}{{print "\t\t"}}"{{$v}}": nil,{{if lt (add $i 1) (len $t.Except.Update)}}{{print "\n"}}{{end}}{{end}}
+    }
+}
+
 /* Single table default actions */
 {{$packageTable := $.Config.ModelPackage}}
 {{if and $.Config.OutputSchemaMethods (ne $packageTable "")}}
 func (s *{{$t.TableGoTypeSignName}}) Insert(ctx context.Context, way *hey.Way, insert func(i hey.SQLInsert)) (int64, error) {
 	return way.Table(s.Table()).InsertFunc(func(i hey.SQLInsert) {
 		i.Select(s.Column()...)
+		i.Forbid(s.ColumnInsertIgnore()...)
 		insert(i)
 	}).Insert(ctx)
 }
@@ -96,6 +117,7 @@ func (s *{{$t.TableGoTypeSignName}}) DeleteSimple(ctx context.Context, way *hey.
 func (s *{{$t.TableGoTypeSignName}}) Update(ctx context.Context, way *hey.Way, update func(w hey.Filter, u hey.SQLUpdateSet)) (int64, error) {
 	return way.Table(s.Table()).UpdateFunc(func(w hey.Filter, u hey.SQLUpdateSet) {
 		u.Select(s.Column()...)
+		u.Forbid(s.ColumnUpdateIgnore()...)
 		update(w, u)
 	}).Update(ctx)
 }

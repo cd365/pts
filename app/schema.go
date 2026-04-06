@@ -51,6 +51,58 @@ type SchemaTableColumnMethods struct {
 	Select []string `yaml:"select"` // columns for query
 }
 
+type ExceptTable struct {
+	column    map[string]*struct{} `yaml:"-"`
+	Insert    []string             `yaml:"insert"`
+	InsertMap map[string]*struct{} `yaml:"-"`
+	Update    []string             `yaml:"update"`
+	UpdateMap map[string]*struct{} `yaml:"-"`
+}
+
+func NewExceptTable(table *Table) *ExceptTable {
+	result := &ExceptTable{
+		column:    make(map[string]*struct{}),
+		InsertMap: make(map[string]*struct{}),
+		UpdateMap: make(map[string]*struct{}),
+	}
+	for _, column := range table.Columns {
+		result.column[column.Column] = nil
+	}
+	return result
+}
+
+func (s *ExceptTable) AddInsert(columns ...string) *ExceptTable {
+	for _, column := range columns {
+		if _, ok := s.column[column]; !ok {
+			continue
+		}
+		if _, ok := s.InsertMap[column]; !ok {
+			s.Insert = append(s.Insert, column)
+			s.InsertMap[column] = nil
+		}
+	}
+	return s
+}
+
+func (s *ExceptTable) AddUpdate(columns ...string) *ExceptTable {
+	for _, column := range columns {
+		if _, ok := s.column[column]; !ok {
+			continue
+		}
+		if _, ok := s.UpdateMap[column]; !ok {
+			s.Update = append(s.Update, column)
+			s.UpdateMap[column] = nil
+		}
+	}
+	return s
+}
+
+type Except struct {
+	Insert []string                `yaml:"insert"`
+	Update []string                `yaml:"update"`
+	Tables map[string]*ExceptTable `yaml:"tables"`
+}
+
 // TemplateTable Config command table
 type TemplateTable struct {
 	TemplateFile            string `yaml:"template_file"`
@@ -86,6 +138,9 @@ type Config struct {
 		Comment string            `yaml:"comment"`
 		Columns map[string]string `yaml:"columns"`
 	} `yaml:"comments"`
+
+	// Except Exclude certain columns when performing insert or update.
+	Except *Except `yaml:"except"`
 
 	// Custom template configuration.
 	TemplateFileCustom  string           `yaml:"template_file_custom"`
@@ -197,6 +252,14 @@ func ParseConfig(configFile string) (*Config, error) {
 	config := &Config{}
 	if err = yaml.NewDecoder(fil).Decode(config); err != nil {
 		return nil, err
+	}
+	{
+		if config.Except == nil {
+			config.Except = &Except{}
+		}
+		if config.Except.Tables == nil {
+			config.Except.Tables = make(map[string]*ExceptTable)
+		}
 	}
 	return config, nil
 }
@@ -396,6 +459,22 @@ func (s *App) Run(ctx context.Context, cmd *cobra.Command, command string, args 
 					}
 				}
 			}
+
+			// config expect columns.
+			{
+				except := NewExceptTable(table)
+				except.AddInsert(s.cfg.Except.Insert...)
+				except.AddUpdate(s.cfg.Except.Update...)
+				except.AddInsert(table.AutoIncrementColumn)
+				except.AddUpdate(table.AutoIncrementColumn)
+				tablesMap := s.cfg.Except.Tables
+				if value, has := tablesMap[table.Table]; has {
+					except.AddInsert(value.Insert...)
+					except.AddUpdate(value.Update...)
+				}
+				tablesMap[table.Table] = except
+				table.Except = except
+			}
 		}
 	}
 
@@ -539,6 +618,10 @@ func (s *App) newTemplateWithFuncMap(name string, content []byte) *template.Temp
 		"add": func(x, y int) int {
 			return x + y
 		},
+		// Subtraction
+		"sub": func(x, y int) int {
+			return x - y
+		},
 		// Used to check if a string is not empty
 		"isNotEmpty": func(s string) bool {
 			return strings.TrimSpace(s) != ""
@@ -611,6 +694,8 @@ type Table struct {
 	TableName           string `db:"-"` // table name, without prefix
 	TableGoTypeName     string `db:"-"` // table go type name struct
 	TableGoTypeSignName string `db:"-"` // table go type name struct with sign
+
+	Except *ExceptTable `db:"-"` // table except
 }
 
 func (s *Table) setColumns(columns []*Column) {

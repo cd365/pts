@@ -33,6 +33,29 @@ comments:
             name: Name
             updated_at: updated timestamp
 
+except:
+    insert:
+        - id
+        - deleted_at
+    update:
+        - id
+        - created_at
+    tables:
+        table1:
+            insert:
+                - column1
+                - column2
+            update:
+                - column1
+                - column3
+        table2:
+            insert:
+                - column1
+                - column2
+            update:
+                - column1
+                - column3
+
 sign: 01
 model_package: model
 

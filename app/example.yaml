@@ -33,6 +33,7 @@ comments:
             name: Name
             updated_at: updated timestamp
 
+# Option configuration ignores a set of columns, and when users construct insert and update data, these sets of columns are ignored.
 except:
     insert:
         - id

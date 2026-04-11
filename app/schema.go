@@ -612,8 +612,19 @@ func (s *App) Run(ctx context.Context, cmd *cobra.Command, command string, args 
 	return
 }
 
+func exists[T comparable](item T, values ...T) bool {
+	for _, value := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *App) newTemplateWithFuncMap(name string, content []byte) *template.Template {
 	funcMap := template.FuncMap{
+		// Determine whether an element value is in a slice.
+		"in": exists[string],
 		// Addition
 		"add": func(x, y int) int {
 			return x + y

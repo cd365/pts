@@ -61,11 +61,11 @@ sign: 01
 model_package: model
 
 # Custom template configuration.
-template_file_custom: replace this with a template file path
-template_file_model: replace this with a template file path
-template_file_schema: replace this with a template file path
-template_file_replace: replace this with a template file path
-template_file_table: replace this with a template file path
+template_file_custom: app/template/default_custom
+template_file_model: app/template/default_model
+template_file_schema: app/template/default_schema
+template_file_replace: app/template/default_replace
+template_file_table:
 
 # Schema output configuration.
 output_schema_methods: true
@@ -77,7 +77,11 @@ output_schema_table_column_methods:
 
 # Table output configuration.
 template_table:
-    - template_file:
-      output_file_directory:
+    - template_file: app/template/default_table
+      output_file_directory: database/db1/schema
       output_file_name_suffix: _admin
       output_go_file_package_name: schema
+    - template_file: app/template/table_admin_api
+      output_file_directory: database/db1/admin
+      output_file_name_suffix: _api
+      output_go_file_package_name: admin

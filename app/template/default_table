@@ -1,6 +1,5 @@
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -14,7 +13,7 @@ import (
 {{if ne $c.Column $.AutoIncrementColumn }} {{continue}} {{end}}
 {{$autoIncrementColumnPascal = $c.ColumnPascal}}
 
-func (s *{{$.TableGoTypeSignName}}) hasNilValue(values []*{{$packageTable}}.{{$.TableGoTypeName}}) bool {
+func (s *{{$.TableGoTypeSignName}}) hasNilValueInsert(values []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) bool {
 	length := len(values)
 	for i := 0; i < length; i++ { {{range $_, $c := $.Columns}}{{if (ne $c.GoType $c.GoTypeBase)}}
 		if values[i].{{$c.ColumnPascal}} == nil {
@@ -24,7 +23,7 @@ func (s *{{$.TableGoTypeSignName}}) hasNilValue(values []*{{$packageTable}}.{{$.
 	return false
 }
 
-func (s *{{$.TableGoTypeSignName}}) hasDuplicate(values []*{{$packageTable}}.{{$.TableGoTypeName}}) bool { {{$first := false}}{{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}} {{continue}} {{end}}{{if not $first}}{{print "\n\t"}}length := len(values){{$first = true}}{{end}}
+func (s *{{$.TableGoTypeSignName}}) hasDuplicateInsert(values []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) bool { {{$first := false}}{{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}} {{continue}} {{end}}{{if not $first}}{{print "\n\t"}}length := len(values){{$first = true}}{{end}}
 	{
 		// {{$index.Column}}
 		exists := make(map[string]*struct{}, length)
@@ -39,12 +38,37 @@ func (s *{{$.TableGoTypeSignName}}) hasDuplicate(values []*{{$packageTable}}.{{$
 	return false
 }
 
-func (s *{{$.TableGoTypeSignName}}) adminSelectHasInsert(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.{{$.TableGoTypeName}}) (bool, error) { {{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}}{{continue}}{{end}}
+func (s *{{$.TableGoTypeSignName}}) hasNilValueUpdate(values []*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) bool {
+	length := len(values)
+	for i := 0; i < length; i++ { {{range $_, $c := $.Columns}}{{if (ne $c.GoType $c.GoTypeBase)}}
+		if values[i].{{$c.ColumnPascal}} == nil {
+			return true
+		}{{end}}{{end}}
+	}
+	return false
+}
+
+func (s *{{$.TableGoTypeSignName}}) hasDuplicateUpdate(values []*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) bool { {{$first := false}}{{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}} {{continue}} {{end}}{{if not $first}}{{print "\n\t"}}length := len(values){{$first = true}}{{end}}
+	{
+		// {{$index.Column}}
+		exists := make(map[string]*struct{}, length)
+		for _, v := range values {
+			key := fmt.Sprintf("{{tableIndexMapKey $index.Columns $table}}", {{tableIndexMapVal $index.Columns $table "v" true}})
+			if _, ok := exists[key]; ok {
+				return true
+			}
+			exists[key] = nil
+		}
+	}{{end}}
+	return false
+}
+
+func (s *{{$.TableGoTypeSignName}}) adminSelectHasUpdateUniqueKey(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) (bool, error) { {{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}}{{continue}}{{end}}
 	{
 		has, err := s.SelectHas(ctx, way, func(table *hey.Table) {
 			table.Select(s.{{$autoIncrementColumnPascal}})
 			table.WhereFunc(func(f hey.Filter) {
-				{{if eq (len $index.Columns) 1}}f.In({{tableIndexMapVal $index.Columns $table "s" false}}, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.{{$.TableGoTypeName}}) any { return {{tableIndexMapVal $index.Columns $table "v" true}} })){{else}}f.InGroup([]string{ {{tableIndexMapVal $index.Columns $table "s" false}} }, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.{{$.TableGoTypeName}}) any { return []any{ {{tableIndexMapVal $index.Columns $table "v" true}} } })){{end}}
+				{{if eq (len $index.Columns) 1}}f.In({{tableIndexMapVal $index.Columns $table "s" false}}, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) any { return {{tableIndexMapVal $index.Columns $table "v" true}} })){{else}}f.InGroup([]string{ {{tableIndexMapVal $index.Columns $table "s" false}} }, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) any { return []any{ {{tableIndexMapVal $index.Columns $table "v" true}} } })){{end}}
 			})
 		})
 		if err != nil {
@@ -57,7 +81,7 @@ func (s *{{$.TableGoTypeSignName}}) adminSelectHasInsert(ctx context.Context, wa
 	return false, nil
 }
 
-func (s *{{$.TableGoTypeSignName}}) adminSelectHas(ctx context.Context, way *hey.Way, value *{{$packageTable}}.{{$.TableGoTypeName}}) (bool, error) {
+func (s *{{$.TableGoTypeSignName}}) adminSelectHasUpdatePrimaryKey(ctx context.Context, way *hey.Way, value *{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) (bool, error) {
 	has, err := s.SelectOne(ctx, way, func(table *hey.Table) {
 		table.Select(s.Id)
 		table.WhereFunc(func(f hey.Filter) {
@@ -73,7 +97,25 @@ func (s *{{$.TableGoTypeSignName}}) adminSelectHas(ctx context.Context, way *hey
 	return false, nil
 }
 
-func (s *{{$.TableGoTypeSignName}}) adminSelectHasUpdate(ctx context.Context, way *hey.Way, value *{{$packageTable}}.{{$.TableGoTypeName}}) (bool, error) { {{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}}{{continue}}{{end}}
+func (s *{{$.TableGoTypeSignName}}) adminSelectHasInsertUniqueKey(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) (bool, error) { {{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}}{{continue}}{{end}}
+	{
+		has, err := s.SelectHas(ctx, way, func(table *hey.Table) {
+			table.Select(s.{{$autoIncrementColumnPascal}})
+			table.WhereFunc(func(f hey.Filter) {
+				{{if eq (len $index.Columns) 1}}f.In({{tableIndexMapVal $index.Columns $table "s" false}}, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) any { return {{tableIndexMapVal $index.Columns $table "v" true}} })){{else}}f.InGroup([]string{ {{tableIndexMapVal $index.Columns $table "s" false}} }, hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) any { return []any{ {{tableIndexMapVal $index.Columns $table "v" true}} } })){{end}}
+			})
+		})
+		if err != nil {
+			return false, err
+		}
+		if has {
+			return true, nil
+		}
+	}{{end}}
+	return false, nil
+}
+
+func (s *{{$.TableGoTypeSignName}}) adminSelectHasUpdateUniqueKeyNotEqual(ctx context.Context, way *hey.Way, value *{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) (bool, error) { {{range $k, $index := $.Indexes}}{{if not $index.UniqueKey}}{{continue}}{{end}}
 	{
 		has, err := s.SelectHas(ctx, way, func(table *hey.Table) {
 			table.Select(s.{{$autoIncrementColumnPascal}})
@@ -92,7 +134,7 @@ func (s *{{$.TableGoTypeSignName}}) adminSelectHasUpdate(ctx context.Context, wa
 	return false, nil
 }
 
-func (s *{{$.TableGoTypeSignName}}) adminInsert(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.{{$.TableGoTypeName}}) error {
+func (s *{{$.TableGoTypeSignName}}) adminInsert(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) error {
 	length := len(values)
 	if length == 0 {
 		return nil
@@ -100,13 +142,13 @@ func (s *{{$.TableGoTypeSignName}}) adminInsert(ctx context.Context, way *hey.Wa
 	if length > 100 {
 		return errors.New("too many elements")
 	}
-	if s.hasNilValue(values) {
+	if s.hasNilValueInsert(values) {
 		return errors.New("the attribute value is null")
 	}
-	if s.hasDuplicate(values) {
+	if s.hasDuplicateInsert(values) {
 		return errors.New("the values in the 'example' column are not unique")
 	}
-	has, err := s.adminSelectHasInsert(ctx, way, values)
+	has, err := s.adminSelectHasInsertUniqueKey(ctx, way, values)
 	if err != nil {
 		return err
 	}
@@ -120,15 +162,36 @@ func (s *{{$.TableGoTypeSignName}}) adminInsert(ctx context.Context, way *hey.Wa
 	})
 }
 
-func (s *{{$.TableGoTypeSignName}}) adminUpdate(ctx context.Context, way *hey.Way, value *{{$packageTable}}.{{$.TableGoTypeName}}) error {
-	has, err := s.adminSelectHas(ctx, way, value)
+func (s *{{$.TableGoTypeSignName}}) adminInsertOne(ctx context.Context, way *hey.Way, value *{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) (int64, error) {
+	if s.hasNilValueInsert([]*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}{value}) {
+		return 0, errors.New("the attribute value is null")
+	}
+	if s.hasDuplicateInsert([]*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}{value}) {
+		return 0, errors.New("the values in the 'example' column are not unique")
+	}
+	has, err := s.adminSelectHasInsertUniqueKey(ctx, way, []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}{value})
+	if err != nil {
+		return 0, err
+	}
+	if has {
+		return 0, errors.New("the values in the 'example' column are not unique")
+	}
+	return s.Insert(ctx, way, func(i hey.SQLInsert) {
+		i.Forbid(s.{{$autoIncrementColumnPascal}}, s.DeletedAt)
+		i.Create(value)
+		i.Default(s.CreatedAt, way.Now().Unix())
+	})
+}
+
+func (s *{{$.TableGoTypeSignName}}) adminUpdate(ctx context.Context, way *hey.Way, value *{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) error {
+	has, err := s.adminSelectHasUpdatePrimaryKey(ctx, way, value)
 	if err != nil {
 		return err
 	}
 	if !has {
 		return errors.New("data id not found")
 	}
-	has, err = s.adminSelectHasUpdate(ctx, way, value)
+	has, err = s.adminSelectHasUpdateUniqueKeyNotEqual(ctx, way, value)
 	if err != nil {
 		return err
 	}
@@ -143,7 +206,7 @@ func (s *{{$.TableGoTypeSignName}}) adminUpdate(ctx context.Context, way *hey.Wa
 	})
 }
 
-func (s *{{$.TableGoTypeSignName}}) adminUpdateAll(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.{{$.TableGoTypeName}}) error {
+func (s *{{$.TableGoTypeSignName}}) adminUpdateAll(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) error {
 	for _, v := range values {
 		err := s.adminUpdate(ctx, way, v)
 		if err != nil {
@@ -153,23 +216,32 @@ func (s *{{$.TableGoTypeSignName}}) adminUpdateAll(ctx context.Context, way *hey
 	return nil
 }
 
-func (s *{{$.TableGoTypeSignName}}) AdminInsert(ctx context.Context, way *hey.Way, data []byte) error {
-	values := make([]*{{$packageTable}}.{{$.TableGoTypeName}}, 0)
-	err := json.Unmarshal(data, &values)
-	if err != nil {
-		return err
+func (s *{{$.TableGoTypeSignName}}) UpdateToInsert(values []*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}} {
+	length := len(values)
+	result := make([]*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}, length)
+	for i := 0; i < length; i++ {
+		result[i] = values[i].ToInsert()
 	}
+	return result
+}
+
+func (s *{{$.TableGoTypeSignName}}) AdminInsert(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) error {
 	return s.adminInsert(ctx, way, values)
 }
 
-func (s *{{$.TableGoTypeSignName}}) AdminRemove(ctx context.Context, way *hey.Way, data []byte) error {
-	values := make([]{{$c.GoTypeBase}}, 0)
-	err := json.Unmarshal(data, &values)
+func (s *{{$.TableGoTypeSignName}}) AdminInsertOne(ctx context.Context, way *hey.Way, value *{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}) error {
+	id, err := s.adminInsertOne(ctx, way, value)
 	if err != nil {
-		return err
+	    return err
 	}
-	values = hey.DiscardDuplicate(nil, values...)
-	length := len(values)
+	value.{{$autoIncrementColumnPascal}} = id
+	return nil
+}
+
+func (s *{{$.TableGoTypeSignName}}) AdminRemove(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.DeleteStruct{{$.TableGoTypeName}}) error {
+	lists := hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.DeleteStruct{{$.TableGoTypeName}}) any { return v.{{$autoIncrementColumnPascal}} })
+    lists = hey.DiscardDuplicate(nil, lists...)
+    length := len(lists)
 	if length == 0 {
 		return nil
 	}
@@ -177,18 +249,14 @@ func (s *{{$.TableGoTypeSignName}}) AdminRemove(ctx context.Context, way *hey.Wa
 		return errors.New("too many elements")
 	}
 	return s.DeleteSimple(ctx, way, func(w hey.Filter) {
-		w.In(s.{{$autoIncrementColumnPascal}}, values)
+		w.In(s.{{$autoIncrementColumnPascal}}, lists...)
 	})
 }
 
-func (s *{{$.TableGoTypeSignName}}) AdminDelete(ctx context.Context, way *hey.Way, data []byte) error {
-	values := make([]{{$c.GoTypeBase}}, 0)
-	err := json.Unmarshal(data, &values)
-	if err != nil {
-		return err
-	}
-	values = hey.DiscardDuplicate(nil, values...)
-	length := len(values)
+func (s *{{$.TableGoTypeSignName}}) AdminDelete(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.DeleteStruct{{$.TableGoTypeName}}) error {
+	lists := hey.SliceToSlice(values, func(k int, v *{{$packageTable}}.DeleteStruct{{$.TableGoTypeName}}) any { return v.{{$autoIncrementColumnPascal}} })
+    lists = hey.DiscardDuplicate(nil, lists...)
+    length := len(lists)
 	if length == 0 {
 		return nil
 	}
@@ -196,19 +264,14 @@ func (s *{{$.TableGoTypeSignName}}) AdminDelete(ctx context.Context, way *hey.Wa
 		return errors.New("too many elements")
 	}
 	return s.UpdateSimple(ctx, way, func(w hey.Filter, u hey.SQLUpdateSet) {
-		w.In(s.{{$autoIncrementColumnPascal}}, values)
+		w.In(s.{{$autoIncrementColumnPascal}}, lists...)
 		now := way.Now()
 		u.Set(s.DeletedAt, now.Unix())
 		u.Default(s.UpdatedAt, now.Unix())
 	})
 }
 
-func (s *{{$.TableGoTypeSignName}}) AdminUpdate(ctx context.Context, way *hey.Way, data []byte) error {
-	values := make([]*{{$packageTable}}.{{$.TableGoTypeName}}, 0)
-	err := json.Unmarshal(data, &values)
-	if err != nil {
-		return err
-	}
+func (s *{{$.TableGoTypeSignName}}) AdminUpdate(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) error {
 	length := len(values)
 	if length == 0 {
 		return nil
@@ -216,18 +279,13 @@ func (s *{{$.TableGoTypeSignName}}) AdminUpdate(ctx context.Context, way *hey.Wa
 	if length > 100 {
 		return errors.New("too many elements")
 	}
-	if s.hasDuplicate(values) {
+	if s.hasDuplicateUpdate(values) {
 		return errors.New("the values in the 'example' column are not unique")
 	}
 	return way.Transaction(ctx, func(tx *hey.Way) error { return s.adminUpdateAll(ctx, tx, values) })
 }
 
-func (s *{{$.TableGoTypeSignName}}) AdminUpsert(ctx context.Context, way *hey.Way, data []byte) error {
-	values := make([]*{{$packageTable}}.{{$.TableGoTypeName}}, 0)
-	err := json.Unmarshal(data, &values)
-	if err != nil {
-		return err
-	}
+func (s *{{$.TableGoTypeSignName}}) AdminUpsert(ctx context.Context, way *hey.Way, values []*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) error {
 	length := len(values)
 	if length == 0 {
 		return nil
@@ -235,27 +293,27 @@ func (s *{{$.TableGoTypeSignName}}) AdminUpsert(ctx context.Context, way *hey.Wa
 	if length > 100 {
 		return errors.New("too many elements")
 	}
-	if s.hasDuplicate(values) {
+	if s.hasDuplicateUpdate(values) {
 		return errors.New("the values in the 'example' column are not unique")
 	}
-	insert := make([]*{{$packageTable}}.{{$.TableGoTypeName}}, 0)
-	update := make([]*{{$packageTable}}.{{$.TableGoTypeName}}, 0)
+	insert := make([]*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}, 0)
+	update := make([]*{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}, 0)
 	for _, v := range values {
 		if v.{{$autoIncrementColumnPascal}} <= 0 {
-			insert = append(insert, v)
+			insert = append(insert, v.ToInsert())
 		} else {
 			update = append(update, v)
 		}
 	}
 	return way.Transaction(ctx, func(tx *hey.Way) error {
 		if len(insert) > 0 {
-			err = s.adminInsert(ctx, tx, insert)
+			err := s.adminInsert(ctx, tx, insert)
 			if err != nil {
 				return err
 			}
 		}
 		if len(update) > 0 {
-			err = s.adminUpdateAll(ctx, tx, update)
+			err := s.adminUpdateAll(ctx, tx, update)
 			if err != nil {
 				return err
 			}
@@ -264,15 +322,10 @@ func (s *{{$.TableGoTypeSignName}}) AdminUpsert(ctx context.Context, way *hey.Wa
 	})
 }
 
-func (s *{{$.TableGoTypeSignName}}) AdminUpsertOne(ctx context.Context, way *hey.Way, data []byte) error {
-	value := &{{$packageTable}}.{{$.TableGoTypeName}}{}
-	err := json.Unmarshal(data, &value)
-	if err != nil {
-		return err
-	}
+func (s *{{$.TableGoTypeSignName}}) AdminUpsertOne(ctx context.Context, way *hey.Way, value *{{$packageTable}}.UpdateStruct{{$.TableGoTypeName}}) error {
 	if value.{{$autoIncrementColumnPascal}} <= 0 {
-		return s.adminInsert(ctx, way, []*{{$packageTable}}.{{$.TableGoTypeName}}{value})
-	} 
+		return s.adminInsert(ctx, way, []*{{$packageTable}}.InsertStruct{{$.TableGoTypeName}}{value.ToInsert()})
+	}
 	return s.adminUpdate(ctx, way, value)
 }
 

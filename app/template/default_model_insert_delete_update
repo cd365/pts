@@ -1,0 +1,28 @@
+{{/* Define the data structures used for adding, deleting, modifying, and querying */}}
+{{range $i, $t := .Tables}}
+// InsertStruct{{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
+type InsertStruct{{$t.TableGoTypeName}} struct {
+{{range $j, $c := $t.Columns}}{{ if in $c.Column "created_at" "updated_at" "deleted_at" }}{{continue}}{{end}}{{print "\t"}}{{$c.ColumnPascal}} {{$c.GoType}} `db:"{{if eq $c.Column $t.AutoIncrementColumn}}-{{else}}{{$c.Column}}{{end}}" json:"{{if eq $c.Column $t.AutoIncrementColumn}}-{{else}}{{$c.ColumnUnderline}}{{end}}" validate:"{{if eq $c.GoType $c.GoTypeBase}}omitempty{{else}}required{{end}}"`{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+}
+
+// DeleteStruct{{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
+type DeleteStruct{{$t.TableGoTypeName}} struct {
+{{range $j, $c := $t.Columns}}{{if ne $c.Column $t.AutoIncrementColumn}}{{continue}}{{end}}{{print "\t"}}{{$c.ColumnPascal}} {{$c.GoType}} `db:"{{$c.Column}}" json:"{{$c.ColumnUnderline}}" validate:"required,min=1"`{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+}
+
+// UpdateStruct{{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
+type UpdateStruct{{$t.TableGoTypeName}} struct {
+{{range $j, $c := $t.Columns}}{{ if in $c.Column "created_at" "updated_at" "deleted_at" }}{{continue}}{{end}}{{print "\t"}}{{$c.ColumnPascal}} {{if ne $c.Column $t.AutoIncrementColumn}}*{{end}}{{$c.GoTypeBase}} `db:"{{if eq $c.Column $t.AutoIncrementColumn}}-{{else}}{{$c.Column}}{{end}}" json:"{{$c.ColumnUnderline}}" validate:"{{if eq $c.GoType $c.GoTypeBase}}omitempty{{else}}required{{end}}"`{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+}
+
+func (s *UpdateStruct{{$t.TableGoTypeName}}) ToInsert() *InsertStruct{{$t.TableGoTypeName}} {
+	result := &InsertStruct{{$t.TableGoTypeName}}{}
+{{range $j, $c := $t.Columns}}{{ if in $c.Column "created_at" "updated_at" "deleted_at" }}{{continue}}{{end}}{{print "\t"}}{{if or (eq $c.Column $t.AutoIncrementColumn) (ne $c.GoType $c.GoTypeBase)}}result.{{$c.ColumnPascal}} = s.{{$c.ColumnPascal}}{{else}}if s.{{$c.ColumnPascal}} == nil {{print "{\n\t\t"}}s.{{$c.ColumnPascal}} = new({{$c.GoTypeBase}}){{print "\n\t}\n\t"}}result.{{$c.ColumnPascal}} = *s.{{$c.ColumnPascal}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	return result
+}
+
+// SelectStruct{{$t.TableGoTypeName}} {{$t.Table}} | {{$t.Comment}}
+type SelectStruct{{$t.TableGoTypeName}} struct {
+{{range $j, $c := $t.Columns}}{{print "\t"}}{{$c.ColumnPascal}} *string `json:"{{$c.ColumnUnderline}}" validate:"omitempty,min=1,max=5120"`{{if isNotEmpty $c.Comment}} // {{$c.Comment}}{{end}}{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+}
+{{end}}

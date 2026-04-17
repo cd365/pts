@@ -165,13 +165,7 @@ func (s *{{$t.TableGoTypeSignName}}) scanAll(rows *sql.Rows) ([]*{{$packageTable
 	return lists, nil
 }
 
-func (s *{{$t.TableGoTypeSignName}}) scanPart(way *hey.Way, rows *sql.Rows, rowsColumns []string) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
-	if len(rowsColumns) == 0 {
-		rowsColumns, err = rows.Columns()
-		if err != nil {
-			return nil, err
-		}
-	}
+func (s *{{$t.TableGoTypeSignName}}) scanPart(way *hey.Way, rows *sql.Rows) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
 	lists = make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
     err = hey.RowsScan(rows, &lists, way.Config().ScanTag)
     if err != nil {
@@ -188,11 +182,11 @@ func (s *{{$t.TableGoTypeSignName}}) scanAuto(way *hey.Way, rows *sql.Rows) ([]*
 	length := len(rowsColumns)
 	length1 := len(s.columnList)
 	if length != length1 {
-		return s.scanPart(way, rows, rowsColumns)
+		return s.scanPart(way, rows)
 	}
 	for i := 0; i < length; i++ {
 		if rowsColumns[i] != s.columnList[i] {
-			return s.scanPart(way, rows, rowsColumns)
+			return s.scanPart(way, rows)
 		}
 	}
 	return s.scanAll(rows)

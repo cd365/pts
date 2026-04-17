@@ -165,47 +165,22 @@ func (s *{{$t.TableGoTypeSignName}}) scanAll(rows *sql.Rows) ([]*{{$packageTable
 	return lists, nil
 }
 
-func (s *{{$t.TableGoTypeSignName}}) scanPart(rows *sql.Rows, rowsColumns []string) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
+func (s *{{$t.TableGoTypeSignName}}) scanPart(way *hey.Way, rows *sql.Rows, rowsColumns []string) (lists []*{{$packageTable}}.{{$t.TableGoTypeName}}, err error) {
 	if len(rowsColumns) == 0 {
 		rowsColumns, err = rows.Columns()
 		if err != nil {
 			return nil, err
 		}
 	}
-	length := len(rowsColumns)
-	rowsScan := make([]int, length)
-	rowsScanMap := make(map[string]int, length)
-	for i, column := range rowsColumns {
-		index, ok := s.columnIndex[column]
-		if !ok {
-			return nil, fmt.Errorf("match-scan mismatched column: %s", column)
-		}
-		rowsScan[i] = index
-		rowsScanMap[column] = index
-	}
 	lists = make([]*{{$packageTable}}.{{$t.TableGoTypeName}}, 0)
-	for rows.Next() {
-		v := &{{$packageTable}}.{{$t.TableGoTypeName}}{}{{range $j, $c := $t.Columns}}{{if ne $c.GoType $c.GoTypeBase}}{{print "\n\t\t"}}v.{{$c.ColumnPascal}} = new({{$c.GoTypeBase}}){{if lt (add $j 1) (len $t.Columns)}}{{end}}{{end}}{{end}}
-		value := reflect.ValueOf(v).Elem()
-		scans := make([]any, length)
-		for i := 0; i < length; i++ {
-			scans[i] = value.Field(rowsScan[i]).Addr().Interface()
-		}
-		if err = rows.Scan(scans...); err != nil {
-			return nil, err
-		}
-		for column, index := range s.columnAllowNull {
-			if _, ok := rowsScanMap[column]; !ok {
-				field := value.Field(index)
-				field.Set(reflect.Zero(field.Type())) // reset to nil
-			}
-		}
-		lists = append(lists, v)
-	}
-	return lists, nil
+    err = hey.RowsScan(rows, &lists, way.Config().ScanTag)
+    if err != nil {
+        return nil, err
+    }
+    return lists, nil
 }
 
-func (s *{{$t.TableGoTypeSignName}}) scanAuto(rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
+func (s *{{$t.TableGoTypeSignName}}) scanAuto(way *hey.Way, rows *sql.Rows) ([]*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
 	rowsColumns, err := rows.Columns()
 	if err != nil {
 		return nil, err
@@ -213,11 +188,11 @@ func (s *{{$t.TableGoTypeSignName}}) scanAuto(rows *sql.Rows) ([]*{{$packageTabl
 	length := len(rowsColumns)
 	length1 := len(s.columnList)
 	if length != length1 {
-		return s.scanPart(rows, rowsColumns)
+		return s.scanPart(way, rows, rowsColumns)
 	}
 	for i := 0; i < length; i++ {
 		if rowsColumns[i] != s.columnList[i] {
-			return s.scanPart(rows, rowsColumns)
+			return s.scanPart(way, rows, rowsColumns)
 		}
 	}
 	return s.scanAll(rows)
@@ -242,7 +217,7 @@ func (s *{{$t.TableGoTypeSignName}}) SelectAll(ctx context.Context, way *hey.Way
 		if selectAllColumn {
 			lists, err = s.scanAll(rows)
 		}else{
-			lists, err = s.scanAuto(rows)
+			lists, err = s.scanAuto(way, rows)
 		}
 		return err
 	})

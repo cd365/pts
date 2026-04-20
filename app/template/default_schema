@@ -58,6 +58,13 @@ func (s *{{$t.TableGoTypeSignName}}) ColumnType() map[string]string {
 	return columnType
 }
 
+// ColumnIndex Get the mapping of column names to their corresponding indexes without modifying the returned map.
+func (s *{{$t.TableGoTypeSignName}}) ColumnIndex() map[string]int {
+	columnIndex := make(map[string]int, len(s.columnType))
+	maps.Copy(columnIndex, s.columnIndex)
+	return columnIndex
+}
+
 // ColumnValueMatch Extract valid data from the map.
 func (s *{{$t.TableGoTypeSignName}}) ColumnValueMatch(data map[string]any) map[string]any {
 	result := make(map[string]any, len(data))

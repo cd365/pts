@@ -737,11 +737,12 @@ type Column struct {
 	ColumnKey              *string `db:"column_key"`               // column index '', 'PRI', 'UNI', 'MUL'
 	Extra                  *string `db:"extra"`                    // column extra auto_increment
 
-	ColumnCamel     string `db:"-"` // column name camel case
-	ColumnPascal    string `db:"-"` // column name pascal case
-	ColumnUnderline string `db:"-"` // column name underline case
-	GoType          string `db:"-"` // string, int64, int, *string ...
-	GoTypeBase      string `db:"-"` // the base type pointed to by the pointer, such as string, int64, int ...
+	ColumnCamel                  string `db:"-"` // column name camel case
+	ColumnPascal                 string `db:"-"` // column name pascal case
+	ColumnUnderline              string `db:"-"` // column name underline case
+	GoType                       string `db:"-"` // string, int64, int, *string ...
+	GoTypeBase                   string `db:"-"` // the base type pointed to by the pointer, such as string, int64, int ...
+	GoTypeBaseColumnDefaultValue string `db:"-"` // column default value of Go basic type
 }
 
 func (s *Column) goType() (result string) {
@@ -789,6 +790,21 @@ func (s *Column) goType() (result string) {
 	return result
 }
 
+func (s *Column) goTypeBaseColumnDefaultValue(goType string) string {
+	goType = strings.ToLower(goType)
+	goType = strings.TrimSpace(goType)
+	switch goType {
+	case "bool":
+		return "false"
+	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64":
+		return "0"
+	case "string":
+		return `""`
+	default:
+		return "nil"
+	}
+}
+
 func (s *Column) init(way *hey.Way) {
 	_ = way
 	if s.ColumnCamel != "" {
@@ -805,6 +821,7 @@ func (s *Column) init(way *hey.Way) {
 	}
 	s.GoType = s.goType()
 	s.GoTypeBase = strings.ReplaceAll(s.GoType, "*", "")
+	s.GoTypeBaseColumnDefaultValue = s.goTypeBaseColumnDefaultValue(s.GoTypeBase)
 }
 
 type Index struct {

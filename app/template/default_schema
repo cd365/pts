@@ -12,6 +12,7 @@ type {{$t.TableGoTypeSignName}} struct {
 	columnType map[string]string // column -> go type
 	columnIndex map[string]int // column -> index, the minimum value is 0
 	columnAllowNull map[string]int // column -> index, all columns that allow null value
+	columnValueDefault map[string]any // column -> default value of Go basic type
 }
 
 /*
@@ -32,6 +33,9 @@ var {{$t.TableGoTypeName}} = &{{$t.TableGoTypeSignName}}{
 	columnAllowNull: map[string]int{
 {{range $j, $c := $t.Columns}}{{if eq $c.GoType $c.GoTypeBase}}{{continue}}{{end}}{{print "\t\t"}}"{{$c.Column}}": {{$j}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
 	},
+	columnValueDefault: map[string]any{
+{{range $j, $c := $t.Columns}}{{print "\t\t"}}"{{$c.Column}}": {{$c.GoTypeBaseColumnDefaultValue}},{{if lt (add $j 1) (len $t.Columns)}}{{print "\n"}}{{end}}{{end}}
+	},
 }
 
 // Table Get table name.
@@ -51,6 +55,21 @@ func (s *{{$t.TableGoTypeSignName}}) Comment() string {
 	return "{{$t.Comment}}"
 }
 
+// ColumnExists Check if the column name exists.
+func (s *{{$t.TableGoTypeSignName}}) ColumnExists(column string) bool {
+	_, ok := s.columnType[column]
+	return ok
+}
+
+// ColumnAllowNull Check if the column value is allowed to be null.
+func (s *{{$t.TableGoTypeSignName}}) ColumnAllowNull(column string) bool {
+	allowNull := s.ColumnExists(column)
+	if allowNull {
+		_, allowNull = s.columnAllowNull[column]
+	}
+	return allowNull
+}
+
 // ColumnType Get the mapping of column names to their corresponding types without modifying the returned map.
 func (s *{{$t.TableGoTypeSignName}}) ColumnType() map[string]string {
 	columnType := make(map[string]string, len(s.columnType))
@@ -63,6 +82,19 @@ func (s *{{$t.TableGoTypeSignName}}) ColumnIndex() map[string]int {
 	columnIndex := make(map[string]int, len(s.columnType))
 	maps.Copy(columnIndex, s.columnIndex)
 	return columnIndex
+}
+
+// ColumnValueDefault Column default value of Go type.
+func (s *{{$t.TableGoTypeSignName}}) ColumnValueDefault(column string) any {
+	value, ok := s.columnValueDefault[column]
+	if !ok {
+		return nil
+	}
+	_, ok = s.columnAllowNull[column]
+	if ok {
+		return nil
+	}
+	return value
 }
 
 // ColumnValueMatch Extract valid data from the map.

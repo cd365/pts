@@ -255,6 +255,9 @@ func (s *{{$t.TableGoTypeSignName}}) SelectAll(ctx context.Context, way *hey.Way
 		return err
 	})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return lists, nil
@@ -267,7 +270,14 @@ func (s *{{$t.TableGoTypeSignName}}) SelectHas(ctx context.Context, way *hey.Way
 			option(table)
 		}
 	}
-	return way.QueryExists(ctx, table.ToExists())
+	has, err := way.QueryExists(ctx, table.ToExists())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return has, nil
 }
 
 func (s *{{$t.TableGoTypeSignName}}) SelectOne(ctx context.Context, way *hey.Way, options ...func(table *hey.Table)) (*{{$packageTable}}.{{$t.TableGoTypeName}}, error) {
